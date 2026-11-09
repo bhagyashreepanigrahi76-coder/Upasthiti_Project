@@ -1,0 +1,695 @@
+// College Attendance & Academic Report App: data model
+// Day 1: identity, roles, academic structure, audit.
+// Day 2: onboarding (OTP, imports), lab batches.
+// Day 3: geofences, punch records, campus sessions, devices.
+// Day 4: calendar, notifications, leave and regularisation requests.
+// Day 5: period timings, rooms, versioned timetables, day-of changes.
+//
+// Development uses SQLite. For production, change provider to "postgresql"
+// and point DATABASE_URL at the Postgres server.
+// Calendar dates are stored as "YYYY-MM-DD" text in the college time zone,
+// so a date never shifts when viewed from another time zone.
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+enum Role {
+  ADMIN
+  HOD
+  TEACHER
+  MENTOR // class coordinator: a teacher assigned to a batch of students
+  STUDENT
+  PARENT
+}
+
+enum StudentStatus {
+  ACTIVE
+  PASSED_OUT
+  ARCHIVED
+}
+
+enum DeviceStatus {
+  PENDING
+  APPROVED
+  REJECTED
+  REVOKED
+}
+
+enum SubjectType {
+  THEORY
+  PRACTICAL
+}
+
+enum OtpPurpose {
+  FIRST_LOGIN
+  PASSWORD_RESET
+}
+
+enum ImportKind {
+  STUDENTS
+  TEACHERS
+}
+
+enum ImportStatus {
+  PREVIEW
+  COMMITTED
+  DISCARDED
+}
+
+enum PunchType {
+  IN
+  OUT
+}
+
+enum PunchStatus {
+  ACCEPTED
+  REJECTED
+}
+
+enum PunchSource {
+  LIVE
+  OFFLINE
+}
+
+enum CampusSessionStatus {
+  OPEN
+  COMPLETE
+  INCOMPLETE // auto-closed at cut-off without a punch-out (FR-10)
+  REGULARISED // fixed through an approved request (FR-11)
+}
+
+enum CalendarEventType {
+  HOLIDAY
+  EXAM
+  WORKING_SATURDAY
+  EVENT
+}
+
+enum RequestStatus {
+  PENDING
+  APPROVED
+  REJECTED
+  CANCELLED
+}
+
+enum LeaveType {
+  MEDICAL
+  PERSONAL
+  FAMILY
+  OTHER
+}
+
+enum RegularisationReason {
+  NETWORK
+  GPS
+  DEVICE
+  FORGOT
+  OTHER
+}
+
+enum DayType {
+  WEEKDAY
+  SATURDAY
+}
+
+enum RoomType {
+  CLASSROOM
+  LAB
+  HALL
+}
+
+enum SlotType {
+  LECTURE
+  PRACTICAL
+  TUTORIAL
+  FREE
+}
+
+enum PeriodChangeType {
+  CANCELLED
+  SUBSTITUTED
+  EXTRA
+}
+
+// ---------------------------------------------------------------------------
+// Identity and access
+// ---------------------------------------------------------------------------
+
+model User {
+  id                 String    @id @default(cuid())
+  collegeId          String    @unique // login ID, stored upper-case
+  name               String
+  email              String?   @unique
+  phone              String?
+  passwordHash       String
+  isActive           Boolean   @default(true)
+  mustChangePassword Boolean   @default(true) // first login needs OTP + new password (FR-1)
+  sessionVersion     Int       @default(0) // bump to sign the user out everywhere
+  failedLoginCount   Int       @default(0)
+  lockedUntil        DateTime?
+  lastLoginAt        DateTime?
+  createdAt          DateTime  @default(now())
+  updatedAt          DateTime  @updatedAt
+
+  roles                 UserRole[]
+  student               Student?
+  teacher               Teacher?
+  parent                Parent?
+  devices               Device[]                @relation("DeviceOwner")
+  auditLogs             AuditLog[]
+  otpTokens             OtpToken[]
+  notifications         Notification[]
+  leaveDecisions        LeaveRequest[]          @relation("LeaveDecider")
+  regularisationDecided RegularisationRequest[] @relation("RegularisationDecider")
+}
+
+// One user can hold several roles (e.g. Teacher + HOD). Each role can be
+// scoped by department, year, section and subject (PRD §3 role design rule).
+model UserRole {
+  id           String   @id @default(cuid())
+  userId       String
+  role         Role
+  departmentId String?
+  year         Int? // 1, 2 or 3
+  sectionId    String?
+  subjectId    String?
+  createdAt    DateTime @default(now())
+
+  user       User        @relation(fields: [userId], references: [id], onDelete: Cascade)
+  department Department? @relation(fields: [departmentId], references: [id])
+  section    Section?    @relation(fields: [sectionId], references: [id])
+  subject    Subject?    @relation(fields: [subjectId], references: [id])
+
+  @@index([userId])
+  @@index([role, departmentId])
+}
+
+// One-time codes for first login and password reset. Only a hash is stored.
+model OtpToken {
+  id         String     @id @default(cuid())
+  userId     String
+  purpose    OtpPurpose
+  codeHash   String
+  sentTo     String // masked address shown to the user
+  expiresAt  DateTime
+  attempts   Int        @default(0)
+  consumedAt DateTime?
+  createdAt  DateTime   @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, purpose])
+}
+
+// FR-4: one student account is bound to one approved device.
+model Device {
+  id           String       @id @default(cuid())
+  userId       String
+  deviceHash   String // SHA-256 of the device identifier sent by the app
+  label        String?
+  userAgent    String?
+  status       DeviceStatus @default(PENDING)
+  approvedById String?
+  approvedAt   DateTime?
+  lastSeenAt   DateTime?
+  createdAt    DateTime     @default(now())
+
+  user User @relation("DeviceOwner", fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, deviceHash])
+}
+
+// FR-2: bulk import. Rows are validated into a preview, then committed.
+model ImportJob {
+  id          String       @id @default(cuid())
+  kind        ImportKind
+  fileName    String
+  status      ImportStatus @default(PREVIEW)
+  totalRows   Int
+  validRows   Int
+  payload     String // JSON: parsed rows with per-row errors
+  createdById String
+  createdAt   DateTime     @default(now())
+  committedAt DateTime?
+}
+
+// ---------------------------------------------------------------------------
+// Academic structure
+// ---------------------------------------------------------------------------
+
+model AcademicYear {
+  id        String   @id @default(cuid())
+  name      String   @unique // e.g. "2026-27"
+  startDate DateTime
+  endDate   DateTime
+  isCurrent Boolean  @default(false)
+  createdAt DateTime @default(now())
+
+  sections        Section[]
+  teacherSubjects TeacherSubject[]
+  timetables      Timetable[]
+  calendarEvents  CalendarEvent[]
+}
+
+model Department {
+  id        String   @id @default(cuid())
+  code      String   @unique // e.g. "CS"
+  name      String
+  programme String // e.g. "B.Sc. Computer Science"
+  createdAt DateTime @default(now())
+
+  sections       Section[]
+  subjects       Subject[]
+  teachers       Teacher[]
+  students       Student[]
+  userRoles      UserRole[]
+  calendarEvents CalendarEvent[]
+}
+
+model Section {
+  id             String   @id @default(cuid())
+  departmentId   String
+  academicYearId String
+  year           Int // 1, 2 or 3
+  name           String // "A", "B", ...
+  createdAt      DateTime @default(now())
+
+  department      Department       @relation(fields: [departmentId], references: [id])
+  academicYear    AcademicYear     @relation(fields: [academicYearId], references: [id])
+  students        Student[]
+  teacherSubjects TeacherSubject[]
+  userRoles       UserRole[]
+  batches         Batch[]
+  timetables      Timetable[]
+  periodChanges   PeriodChange[]
+
+  @@unique([departmentId, academicYearId, year, name])
+}
+
+// FR-56: a section can split into lab batches.
+model Batch {
+  id        String   @id @default(cuid())
+  sectionId String
+  name      String // "Batch 1"
+  createdAt DateTime @default(now())
+
+  section        Section         @relation(fields: [sectionId], references: [id], onDelete: Cascade)
+  students       Student[]
+  timetableSlots TimetableSlot[]
+
+  @@unique([sectionId, name])
+}
+
+model Subject {
+  id           String      @id @default(cuid())
+  code         String      @unique
+  name         String
+  departmentId String
+  year         Int // 1, 2 or 3
+  semester     Int // 1 to 6
+  credits      Int         @default(4)
+  type         SubjectType @default(THEORY)
+  createdAt    DateTime    @default(now())
+
+  department      Department       @relation(fields: [departmentId], references: [id])
+  teacherSubjects TeacherSubject[]
+  userRoles       UserRole[]
+  timetableSlots  TimetableSlot[]
+  periodChanges   PeriodChange[]
+}
+
+// ---------------------------------------------------------------------------
+// People
+// ---------------------------------------------------------------------------
+
+model Teacher {
+  id           String   @id @default(cuid())
+  userId       String   @unique
+  departmentId String
+  designation  String?
+  createdAt    DateTime @default(now())
+
+  user           User             @relation(fields: [userId], references: [id], onDelete: Cascade)
+  department     Department       @relation(fields: [departmentId], references: [id])
+  subjects       TeacherSubject[]
+  mentees        Student[]        @relation("Mentor")
+  timetableSlots TimetableSlot[]
+  substitutions  PeriodChange[]   @relation("Substitute")
+}
+
+// A teacher teaches a subject to a section in an academic year (FR-26).
+model TeacherSubject {
+  id             String   @id @default(cuid())
+  teacherId      String
+  subjectId      String
+  sectionId      String
+  academicYearId String
+  createdAt      DateTime @default(now())
+
+  teacher      Teacher      @relation(fields: [teacherId], references: [id], onDelete: Cascade)
+  subject      Subject      @relation(fields: [subjectId], references: [id])
+  section      Section      @relation(fields: [sectionId], references: [id])
+  academicYear AcademicYear @relation(fields: [academicYearId], references: [id])
+
+  @@unique([teacherId, subjectId, sectionId, academicYearId])
+}
+
+model Student {
+  id            String        @id @default(cuid())
+  userId        String        @unique
+  rollNo        String        @unique
+  departmentId  String
+  sectionId     String
+  batchId       String?
+  year          Int // 1, 2 or 3
+  admissionYear Int
+  dateOfBirth   DateTime? // needed for under-18 privacy handling (PRD §7)
+  status        StudentStatus @default(ACTIVE)
+  mentorId      String?
+  createdAt     DateTime      @default(now())
+
+  user            User                    @relation(fields: [userId], references: [id], onDelete: Cascade)
+  department      Department              @relation(fields: [departmentId], references: [id])
+  section         Section                 @relation(fields: [sectionId], references: [id])
+  batch           Batch?                  @relation(fields: [batchId], references: [id], onDelete: SetNull)
+  mentor          Teacher?                @relation("Mentor", fields: [mentorId], references: [id])
+  parents         ParentStudent[]
+  punches         PunchRecord[]
+  campusSessions  CampusSession[]
+  leaveRequests   LeaveRequest[]
+  regularisations RegularisationRequest[]
+
+  @@index([sectionId])
+}
+
+// Parents always receive emails; a login (userId) is optional (PRD §3, Q7).
+model Parent {
+  id                      String   @id @default(cuid())
+  name                    String
+  email                   String
+  phone                   String?
+  userId                  String?  @unique
+  unsubscribedNonCritical Boolean  @default(false) // FR-40: critical alerts always sent
+  createdAt               DateTime @default(now())
+
+  user     User?           @relation(fields: [userId], references: [id], onDelete: SetNull)
+  students ParentStudent[]
+}
+
+model ParentStudent {
+  parentId     String
+  studentId    String
+  relationship String @default("Guardian") // Father, Mother, Guardian
+
+  parent  Parent  @relation(fields: [parentId], references: [id], onDelete: Cascade)
+  student Student @relation(fields: [studentId], references: [id], onDelete: Cascade)
+
+  @@id([parentId, studentId])
+}
+
+// ---------------------------------------------------------------------------
+// Geofenced campus attendance (Day 3)
+// ---------------------------------------------------------------------------
+
+// FR-5: one or more campus points, each with its own radius.
+model Geofence {
+  id           String   @id @default(cuid())
+  name         String
+  latitude     Float
+  longitude    Float
+  radiusMeters Int      @default(100)
+  isActive     Boolean  @default(true)
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  punches PunchRecord[]
+}
+
+// Every punch attempt is stored, accepted or rejected, with the raw data the
+// server used to decide (FR-7). Rejected punches feed the exceptions report.
+model PunchRecord {
+  id             String      @id @default(cuid())
+  studentId      String
+  type           PunchType
+  status         PunchStatus
+  reason         String? // rejection code, e.g. OUTSIDE_GEOFENCE
+  message        String?
+  latitude       Float
+  longitude      Float
+  accuracyMeters Float
+  distanceMeters Float?
+  geofenceId     String?
+  deviceHash     String?
+  deviceTime     DateTime
+  serverTime     DateTime    @default(now())
+  effectiveTime  DateTime // server time, or device time for offline punches
+  source         PunchSource @default(LIVE)
+  flags          String? // JSON array: CLOCK_SKEW, IMPOSSIBLE_MOVEMENT, LATE_SYNC...
+  dateKey        String // YYYY-MM-DD in college time zone
+  sessionId      String?
+
+  student  Student        @relation(fields: [studentId], references: [id], onDelete: Cascade)
+  geofence Geofence?      @relation(fields: [geofenceId], references: [id], onDelete: SetNull)
+  session  CampusSession? @relation(fields: [sessionId], references: [id], onDelete: SetNull)
+
+  @@index([studentId, serverTime])
+  @@index([dateKey, status])
+}
+
+// FR-6: time on campus = punch out minus punch in.
+model CampusSession {
+  id              String              @id @default(cuid())
+  studentId       String
+  dateKey         String
+  inAt            DateTime
+  outAt           DateTime?
+  status          CampusSessionStatus @default(OPEN)
+  minutesOnCampus Int?
+  closedReason    String?
+  createdAt       DateTime            @default(now())
+  updatedAt       DateTime            @updatedAt
+
+  student         Student                 @relation(fields: [studentId], references: [id], onDelete: Cascade)
+  punches         PunchRecord[]
+  regularisations RegularisationRequest[]
+
+  @@index([studentId, dateKey])
+  @@index([status, dateKey])
+}
+
+// ---------------------------------------------------------------------------
+// Calendar, notifications, requests (Day 4)
+// ---------------------------------------------------------------------------
+
+// FR-14/15: holidays, exams, working Saturdays and events. Leaving
+// departmentId / year empty applies the entry to everyone.
+model CalendarEvent {
+  id             String            @id @default(cuid())
+  academicYearId String?
+  title          String
+  description    String?
+  type           CalendarEventType
+  startDate      String // YYYY-MM-DD
+  endDate        String // YYYY-MM-DD, inclusive
+  departmentId   String?
+  year           Int?
+  createdById    String?
+  createdAt      DateTime          @default(now())
+  updatedAt      DateTime          @updatedAt
+
+  academicYear AcademicYear? @relation(fields: [academicYearId], references: [id])
+  department   Department?   @relation(fields: [departmentId], references: [id])
+
+  @@index([startDate])
+}
+
+model Notification {
+  id        String    @id @default(cuid())
+  userId    String
+  title     String
+  body      String?
+  link      String?
+  readAt    DateTime?
+  createdAt DateTime  @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, readAt])
+}
+
+// FR-11: fix a missed or incomplete campus day.
+model RegularisationRequest {
+  id           String               @id @default(cuid())
+  studentId    String
+  dateKey      String
+  sessionId    String?
+  requestedIn  String // HH:MM
+  requestedOut String // HH:MM
+  reason       RegularisationReason
+  details      String
+  status       RequestStatus        @default(PENDING)
+  decidedById  String?
+  decidedAt    DateTime?
+  decisionNote String?
+  createdAt    DateTime             @default(now())
+
+  student   Student        @relation(fields: [studentId], references: [id], onDelete: Cascade)
+  session   CampusSession? @relation(fields: [sessionId], references: [id], onDelete: SetNull)
+  decidedBy User?          @relation("RegularisationDecider", fields: [decidedById], references: [id], onDelete: SetNull)
+
+  @@index([studentId, dateKey])
+  @@index([status])
+}
+
+// FR-17: student leave with optional supporting document.
+model LeaveRequest {
+  id           String        @id @default(cuid())
+  studentId    String
+  fromDate     String // YYYY-MM-DD
+  toDate       String // YYYY-MM-DD, inclusive
+  type         LeaveType
+  reason       String
+  documentPath String? // relative path under the private uploads folder
+  documentName String?
+  documentMime String?
+  documentSize Int?
+  status       RequestStatus @default(PENDING)
+  decidedById  String?
+  decidedAt    DateTime?
+  decisionNote String?
+  createdAt    DateTime      @default(now())
+
+  student   Student @relation(fields: [studentId], references: [id], onDelete: Cascade)
+  decidedBy User?   @relation("LeaveDecider", fields: [decidedById], references: [id], onDelete: SetNull)
+
+  @@index([studentId, fromDate])
+  @@index([status])
+}
+
+// ---------------------------------------------------------------------------
+// Timetable (Day 5)
+// ---------------------------------------------------------------------------
+
+// FR-54: period timings, set once, separate for Saturdays. Breaks have no
+// periodNumber.
+model PeriodTiming {
+  id           String  @id @default(cuid())
+  dayType      DayType
+  sortOrder    Int
+  periodNumber Int?
+  label        String? // e.g. "Lunch"
+  startTime    String // HH:MM
+  endTime      String // HH:MM
+
+  @@unique([dayType, sortOrder])
+}
+
+model Room {
+  id        String   @id @default(cuid())
+  name      String   @unique
+  type      RoomType @default(CLASSROOM)
+  capacity  Int?
+  createdAt DateTime @default(now())
+
+  slots TimetableSlot[]
+}
+
+// FR-64: each version has an effective-from date; past days keep using the
+// version that was active then.
+model Timetable {
+  id             String   @id @default(cuid())
+  sectionId      String
+  academicYearId String
+  semester       Int
+  effectiveFrom  String // YYYY-MM-DD
+  note           String?
+  createdById    String?
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  section      Section         @relation(fields: [sectionId], references: [id], onDelete: Cascade)
+  academicYear AcademicYear    @relation(fields: [academicYearId], references: [id])
+  slots        TimetableSlot[]
+
+  @@unique([sectionId, effectiveFrom])
+}
+
+// FR-55: subject, teacher, room and type; labs can span several periods.
+model TimetableSlot {
+  id           String   @id @default(cuid())
+  timetableId  String
+  dayOfWeek    Int // 1 = Monday ... 6 = Saturday
+  periodNumber Int
+  span         Int      @default(1)
+  type         SlotType @default(LECTURE)
+  subjectId    String?
+  teacherId    String?
+  roomId       String?
+  batchId      String? // empty = whole section
+
+  timetable Timetable      @relation(fields: [timetableId], references: [id], onDelete: Cascade)
+  subject   Subject?       @relation(fields: [subjectId], references: [id])
+  teacher   Teacher?       @relation(fields: [teacherId], references: [id])
+  room      Room?          @relation(fields: [roomId], references: [id])
+  batch     Batch?         @relation(fields: [batchId], references: [id], onDelete: SetNull)
+  changes   PeriodChange[]
+
+  @@index([timetableId, dayOfWeek])
+}
+
+// FR-63: cancelled, substituted or extra periods on a specific date.
+model PeriodChange {
+  id                  String           @id @default(cuid())
+  dateKey             String
+  sectionId           String
+  timetableSlotId     String?
+  periodNumber        Int
+  type                PeriodChangeType
+  substituteTeacherId String?
+  subjectId           String? // for extra classes
+  note                String?
+  createdById         String
+  createdAt           DateTime         @default(now())
+
+  section    Section        @relation(fields: [sectionId], references: [id], onDelete: Cascade)
+  slot       TimetableSlot? @relation(fields: [timetableSlotId], references: [id], onDelete: SetNull)
+  substitute Teacher?       @relation("Substitute", fields: [substituteTeacherId], references: [id])
+  subject    Subject?       @relation(fields: [subjectId], references: [id])
+
+  @@index([sectionId, dateKey])
+}
+
+// ---------------------------------------------------------------------------
+// Settings and audit
+// ---------------------------------------------------------------------------
+
+// Key/value settings edited by admin. `value` holds JSON text.
+model Setting {
+  key       String   @id
+  value     String
+  updatedAt DateTime @updatedAt
+}
+
+// FR-30 / PRD §7 auditability: who did what, when and why.
+model AuditLog {
+  id         String   @id @default(cuid())
+  actorId    String?
+  action     String // e.g. LOGIN_SUCCESS, USER_CREATED, PUNCH_REJECTED
+  entityType String?
+  entityId   String?
+  details    String? // JSON text
+  ipAddress  String?
+  userAgent  String?
+  createdAt  DateTime @default(now())
+
+  actor User? @relation(fields: [actorId], references: [id], onDelete: SetNull)
+
+  @@index([createdAt])
+  @@index([actorId])
+}
