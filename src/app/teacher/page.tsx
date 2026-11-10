@@ -5,8 +5,9 @@ import { db } from "@/lib/db";
 import { formatLongDate } from "@/lib/config";
 import { minutesOfDay, toDateKey } from "@/lib/dates";
 import { teacherDay } from "@/lib/timetable";
-import { Badge, Card, ComingSoon, EmptyState, PageHeader, StatCard } from "@/components/ui";
+import { Badge, Card, EmptyState, PageHeader, StatCard } from "@/components/ui";
 import { DayList } from "@/components/timetable-views";
+import { DashboardNotices } from "@/components/notices-ui";
 
 export const metadata: Metadata = { title: "Teacher dashboard" };
 
@@ -67,7 +68,21 @@ export default async function TeacherDashboardPage() {
           </Link>
         }
       >
-        <DayList periods={todays} show="section" nowMinutes={minutesOfDay(now)} />
+        <DayList
+          periods={todays}
+          show="section"
+          nowMinutes={minutesOfDay(now)}
+          actions={(p) =>
+            p.teacherId === teacher.id && p.status !== "CANCELLED" ? (
+              <Link
+                href={`/teacher/attendance/${toDateKey(now)}/${encodeURIComponent(p.periodKey)}`}
+                className="rounded-md border border-slate-300 px-2 py-1 text-xs font-medium text-slate-700 hover:bg-slate-50"
+              >
+                Attendance
+              </Link>
+            ) : null
+          }
+        />
       </Card>
 
       <div className="mt-6 grid gap-6 lg:grid-cols-2">
@@ -114,17 +129,15 @@ export default async function TeacherDashboardPage() {
             )}
           </Card>
         ) : (
-          <div className="space-y-4">
-            <ComingSoon day={6}>Open a period to mark Present / Absent / Late.</ComingSoon>
-            <ComingSoon day={7}>Enter Internal, Assignment and Practical marks.</ComingSoon>
+          <div>
+            <DashboardNotices user={user} />
           </div>
         )}
       </div>
 
       {isMentor && (
-        <div className="mt-6 grid gap-4 md:grid-cols-2">
-          <ComingSoon day={6}>Open a period to mark Present / Absent / Late.</ComingSoon>
-          <ComingSoon day={7}>Enter Internal, Assignment and Practical marks.</ComingSoon>
+        <div className="mt-6">
+          <DashboardNotices user={user} />
         </div>
       )}
     </>

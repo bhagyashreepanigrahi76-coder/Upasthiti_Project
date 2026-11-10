@@ -4,6 +4,11 @@
 // Day 3: geofences, punch records, campus sessions, devices.
 // Day 4: calendar, notifications, leave and regularisation requests.
 // Day 5: period timings, rooms, versioned timetables, day-of changes.
+// Day 6: class sessions, attendance records, edit requests.
+// Day 7: assessments, marks, revisions.
+// Day 8: notices, read tracking, notice history.
+// Day 9: email queue / delivery log, monthly report runs.
+// Day 10: consent, two-step sign-in.
 //
 // Development uses SQLite. For production, change provider to "postgresql"
 // and point DATABASE_URL at the Postgres server.
@@ -26,6 +31,13 @@ enum Role {
   MENTOR // class coordinator: a teacher assigned to a batch of students
   STUDENT
   PARENT
+  LIBRARIAN
+}
+
+enum LoanStatus {
+  ISSUED
+  RETURNED
+  LOST
 }
 
 enum StudentStatus {
@@ -49,6 +61,32 @@ enum SubjectType {
 enum OtpPurpose {
   FIRST_LOGIN
   PASSWORD_RESET
+  TWO_FACTOR
+}
+
+enum EmailStatus {
+  QUEUED
+  SENDING
+  SENT
+  FAILED
+  BOUNCED
+  CANCELLED
+}
+
+enum EmailKind {
+  MONTHLY_REPORT
+  LOW_ATTENDANCE
+  COORDINATOR_COPY
+  NOTICE
+  OTP
+  OTHER
+}
+
+enum ReportRunStatus {
+  SENDING
+  PAUSED
+  COMPLETED
+  CANCELLED
 }
 
 enum ImportKind {
@@ -137,6 +175,54 @@ enum PeriodChangeType {
   EXTRA
 }
 
+enum AttendanceStatus {
+  PRESENT
+  ABSENT
+  LATE
+  ON_LEAVE
+  MEDICAL
+}
+
+enum AssessmentKind {
+  INTERNAL1
+  INTERNAL2
+  ASSIGNMENT
+  PRACTICAL
+  SEMESTER
+}
+
+enum MarksStatus {
+  DRAFT
+  SUBMITTED
+  VERIFIED
+  LOCKED
+  PUBLISHED
+}
+
+enum NoticeCategory {
+  EXAM
+  RESULT
+  HOLIDAY
+  EVENT
+  TIMETABLE
+  PLACEMENT
+  GENERAL
+}
+
+enum NoticeAudience {
+  EVERYONE
+  STUDENTS
+  TEACHERS
+  PARENTS
+}
+
+enum NoticeStatus {
+  PENDING_APPROVAL
+  PUBLISHED
+  REJECTED
+  WITHDRAWN
+}
+
 // ---------------------------------------------------------------------------
 // Identity and access
 // ---------------------------------------------------------------------------
@@ -151,6 +237,9 @@ model User {
   isActive           Boolean   @default(true)
   mustChangePassword Boolean   @default(true) // first login needs OTP + new password (FR-1)
   sessionVersion     Int       @default(0) // bump to sign the user out everywhere
+  twoFactorEnabled   Boolean   @default(false) // staff: emailed code at sign-in (FR-3)
+  consentAt          DateTime? // privacy consent (PRD §7, DPDP Act 2023)
+  consentVersion     String?
   failedLoginCount   Int       @default(0)
   lockedUntil        DateTime?
   lastLoginAt        DateTime?
@@ -167,6 +256,10 @@ model User {
   notifications         Notification[]
   leaveDecisions        LeaveRequest[]          @relation("LeaveDecider")
   regularisationDecided RegularisationRequest[] @relation("RegularisationDecider")
+  editRequests          AttendanceEditRequest[] @relation("EditRequester")
+  editDecisions         AttendanceEditRequest[] @relation("EditDecider")
+  noticesAuthored       Notice[]                @relation("NoticeAuthor")
+  noticeReads           NoticeRead[]
 }
 
 // One user can hold several roles (e.g. Teacher + HOD). Each role can be
@@ -255,6 +348,7 @@ model AcademicYear {
   teacherSubjects TeacherSubject[]
   timetables      Timetable[]
   calendarEvents  CalendarEvent[]
+  assessments     Assessment[]
 }
 
 model Department {
@@ -270,6 +364,9 @@ model Department {
   students       Student[]
   userRoles      UserRole[]
   calendarEvents CalendarEvent[]
+  notices        Notice[]
+  books          Book[]
+  notes          Note[]
 }
 
 model Section {
@@ -288,6 +385,9 @@ model Section {
   batches         Batch[]
   timetables      Timetable[]
   periodChanges   PeriodChange[]
+  classSessions   ClassSession[]
+  assessments     Assessment[]
+  notices         Notice[]
 
   @@unique([departmentId, academicYearId, year, name])
 }
@@ -302,6 +402,7 @@ model Batch {
   section        Section         @relation(fields: [sectionId], references: [id], onDelete: Cascade)
   students       Student[]
   timetableSlots TimetableSlot[]
+  classSessions  ClassSession[]
 
   @@unique([sectionId, name])
 }
@@ -322,6 +423,10 @@ model Subject {
   userRoles       UserRole[]
   timetableSlots  TimetableSlot[]
   periodChanges   PeriodChange[]
+  classSessions   ClassSession[]
+  assessments     Assessment[]
+  notices         Notice[]
+  notes           Note[]
 }
 
 // ---------------------------------------------------------------------------
@@ -341,6 +446,7 @@ model Teacher {
   mentees        Student[]        @relation("Mentor")
   timetableSlots TimetableSlot[]
   substitutions  PeriodChange[]   @relation("Substitute")
+  classSessions  ClassSession[]
 }
 
 // A teacher teaches a subject to a section in an academic year (FR-26).
@@ -384,6 +490,10 @@ model Student {
   campusSessions  CampusSession[]
   leaveRequests   LeaveRequest[]
   regularisations RegularisationRequest[]
+  attendance      AttendanceRecord[]
+  marks           MarkEntry[]
+  markRevisions   MarkRevision[]
+  loans           BookLoan[]
 
   @@index([sectionId])
 }
@@ -395,11 +505,14 @@ model Parent {
   email                   String
   phone                   String?
   userId                  String?  @unique
-  unsubscribedNonCritical Boolean  @default(false) // FR-40: critical alerts always sent
+  unsubscribedNonCritical Boolean  @default(false) // FR-40: monthly reports and other non-critical mail
+  criticalOptOutApproved  Boolean  @default(false) // FR-40: only an admin can stop critical alerts
+  unsubscribeToken        String   @unique @default(cuid())
   createdAt               DateTime @default(now())
 
   user     User?           @relation(fields: [userId], references: [id], onDelete: SetNull)
   students ParentStudent[]
+  emails   EmailLog[]
 }
 
 model ParentStudent {
@@ -505,6 +618,7 @@ model CalendarEvent {
 
   academicYear AcademicYear? @relation(fields: [academicYearId], references: [id])
   department   Department?   @relation(fields: [departmentId], references: [id])
+  notices      Notice[]
 
   @@index([startDate])
 }
@@ -663,6 +777,334 @@ model PeriodChange {
   subject    Subject?       @relation(fields: [subjectId], references: [id])
 
   @@index([sectionId, dateKey])
+}
+
+// ---------------------------------------------------------------------------
+// Class attendance (Day 6)
+// ---------------------------------------------------------------------------
+
+// A timetabled period that actually took place and had attendance taken.
+// periodKey identifies the scheduled period: a timetable slot ID, or
+// "x:<periodChangeId>" for an extra class (FR-61).
+model ClassSession {
+  id           String   @id @default(cuid())
+  dateKey      String
+  periodKey    String
+  sectionId    String
+  subjectId    String?
+  batchId      String?
+  periodNumber Int
+  span         Int      @default(1)
+  teacherId    String // teacher responsible for the period
+  takenById    String // user who first saved attendance
+  takenAt      DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  section      Section                 @relation(fields: [sectionId], references: [id], onDelete: Cascade)
+  subject      Subject?                @relation(fields: [subjectId], references: [id])
+  batch        Batch?                  @relation(fields: [batchId], references: [id], onDelete: SetNull)
+  teacher      Teacher                 @relation(fields: [teacherId], references: [id])
+  records      AttendanceRecord[]
+  editRequests AttendanceEditRequest[]
+
+  @@unique([dateKey, periodKey])
+  @@index([sectionId, dateKey])
+}
+
+model AttendanceRecord {
+  id             String           @id @default(cuid())
+  classSessionId String
+  studentId      String
+  status         AttendanceStatus
+  markedById     String
+  updatedAt      DateTime         @updatedAt
+
+  session ClassSession @relation(fields: [classSessionId], references: [id], onDelete: Cascade)
+  student Student      @relation(fields: [studentId], references: [id], onDelete: Cascade)
+
+  @@unique([classSessionId, studentId])
+  @@index([studentId])
+}
+
+// FR-20: edits after the edit window need HOD approval.
+model AttendanceEditRequest {
+  id             String        @id @default(cuid())
+  classSessionId String
+  requestedById  String
+  changes        String // JSON: [{ studentId, from, to }]
+  reason         String
+  status         RequestStatus @default(PENDING)
+  decidedById    String?
+  decidedAt      DateTime?
+  decisionNote   String?
+  createdAt      DateTime      @default(now())
+
+  session     ClassSession @relation(fields: [classSessionId], references: [id], onDelete: Cascade)
+  requestedBy User         @relation("EditRequester", fields: [requestedById], references: [id])
+  decidedBy   User?        @relation("EditDecider", fields: [decidedById], references: [id], onDelete: SetNull)
+
+  @@index([status])
+}
+
+// ---------------------------------------------------------------------------
+// Marks and results (Day 7)
+// ---------------------------------------------------------------------------
+
+// One assessment of a subject for a section (FR-21). Workflow (FR-23):
+// DRAFT -> SUBMITTED -> VERIFIED -> LOCKED -> PUBLISHED. A LOCKED assessment
+// with publishAt in the past is visible to students (FR-24).
+model Assessment {
+  id             String         @id @default(cuid())
+  subjectId      String
+  sectionId      String
+  academicYearId String
+  kind           AssessmentKind
+  maxMarks       Int
+  weightage      Int // percent of the subject total
+  status         MarksStatus    @default(DRAFT)
+  returnNote     String? // reason when sent back for correction
+  submittedById  String?
+  submittedAt    DateTime?
+  verifiedById   String?
+  verifiedAt     DateTime?
+  lockedById     String?
+  lockedAt       DateTime?
+  publishAt      DateTime?
+  publishedAt    DateTime?
+  notifiedAt     DateTime?
+  createdAt      DateTime       @default(now())
+  updatedAt      DateTime       @updatedAt
+
+  subject      Subject        @relation(fields: [subjectId], references: [id])
+  section      Section        @relation(fields: [sectionId], references: [id], onDelete: Cascade)
+  academicYear AcademicYear   @relation(fields: [academicYearId], references: [id])
+  marks        MarkEntry[]
+  revisions    MarkRevision[]
+
+  @@unique([subjectId, sectionId, academicYearId, kind])
+  @@index([status])
+}
+
+model MarkEntry {
+  id           String   @id @default(cuid())
+  assessmentId String
+  studentId    String
+  marks        Float?
+  absent       Boolean  @default(false) // "AB" (FR-22)
+  updatedById  String
+  updatedAt    DateTime @updatedAt
+
+  assessment Assessment @relation(fields: [assessmentId], references: [id], onDelete: Cascade)
+  student    Student    @relation(fields: [studentId], references: [id], onDelete: Cascade)
+
+  @@unique([assessmentId, studentId])
+}
+
+// FR-23: locked marks change only through a logged revision.
+model MarkRevision {
+  id           String   @id @default(cuid())
+  assessmentId String
+  studentId    String
+  oldMarks     Float?
+  oldAbsent    Boolean
+  newMarks     Float?
+  newAbsent    Boolean
+  reason       String
+  revisedById  String
+  createdAt    DateTime @default(now())
+
+  assessment Assessment @relation(fields: [assessmentId], references: [id], onDelete: Cascade)
+  student    Student    @relation(fields: [studentId], references: [id], onDelete: Cascade)
+}
+
+// ---------------------------------------------------------------------------
+// Announcements and notice board (Day 8)
+// ---------------------------------------------------------------------------
+
+// FR-43..53. departmentId / year / sectionId / subjectId narrow the
+// audience (e.g. STUDENTS + year 1 = "only Year 1").
+model Notice {
+  id              String         @id @default(cuid())
+  title           String
+  body            String
+  category        NoticeCategory @default(GENERAL)
+  audience        NoticeAudience @default(EVERYONE)
+  departmentId    String?
+  year            Int?
+  sectionId       String?
+  subjectId       String?
+  urgent          Boolean        @default(false)
+  pinned          Boolean        @default(false)
+  isPublic        Boolean        @default(false) // also on the public board (FR-42)
+  status          NoticeStatus   @default(PUBLISHED)
+  publishAt       DateTime       @default(now())
+  expiresAt       DateTime?
+  notifyOnPublish Boolean        @default(true)
+  emailOnPublish  Boolean        @default(false)
+  notifiedAt      DateTime?
+  attachmentPath  String?
+  attachmentName  String?
+  attachmentMime  String?
+  attachmentSize  Int?
+  calendarEventId String?
+  createdById     String
+  approvedById    String?
+  approvedAt      DateTime?
+  editedAt        DateTime? // shows the "Updated" label (FR-49)
+  createdAt       DateTime       @default(now())
+  updatedAt       DateTime       @updatedAt
+
+  createdBy     User            @relation("NoticeAuthor", fields: [createdById], references: [id])
+  department    Department?     @relation(fields: [departmentId], references: [id])
+  section       Section?        @relation(fields: [sectionId], references: [id], onDelete: SetNull)
+  subject       Subject?        @relation(fields: [subjectId], references: [id], onDelete: SetNull)
+  calendarEvent CalendarEvent?  @relation(fields: [calendarEventId], references: [id], onDelete: SetNull)
+  reads         NoticeRead[]
+  history       NoticeHistory[]
+
+  @@index([status, publishAt])
+}
+
+model NoticeRead {
+  noticeId String
+  userId   String
+  readAt   DateTime @default(now())
+
+  notice Notice @relation(fields: [noticeId], references: [id], onDelete: Cascade)
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@id([noticeId, userId])
+}
+
+model NoticeHistory {
+  id        String   @id @default(cuid())
+  noticeId  String
+  action    String // CREATED, EDITED, APPROVED, REJECTED, WITHDRAWN
+  actorId   String
+  snapshot  String? // JSON of the notice before the change
+  createdAt DateTime @default(now())
+
+  notice Notice @relation(fields: [noticeId], references: [id], onDelete: Cascade)
+}
+
+// ---------------------------------------------------------------------------
+// Parent communication (Day 9)
+// ---------------------------------------------------------------------------
+
+// FR-36..39: one monthly report run. Its emails can be paused or resent.
+model ReportRun {
+  id          String          @id @default(cuid())
+  monthKey    String // YYYY-MM the report covers
+  status      ReportRunStatus @default(SENDING)
+  trigger     String // SCHEDULED or MANUAL
+  students    Int             @default(0)
+  warnings    Int             @default(0)
+  critical    Int             @default(0)
+  createdById String?
+  createdAt   DateTime        @default(now())
+
+  emails EmailLog[]
+
+  @@index([monthKey])
+}
+
+// Outgoing email queue and delivery log (FR-39). Rows are retried with
+// back-off until sent, or marked FAILED / BOUNCED.
+model EmailLog {
+  id            String      @id @default(cuid())
+  kind          EmailKind
+  toAddress     String
+  subject       String
+  textBody      String
+  htmlBody      String?
+  status        EmailStatus @default(QUEUED)
+  priority      Int         @default(0) // higher goes first (critical alerts)
+  attempts      Int         @default(0)
+  lastError     String?
+  nextAttemptAt DateTime    @default(now())
+  sentAt        DateTime?
+  runId         String?
+  studentId     String?
+  parentId      String?
+  createdAt     DateTime    @default(now())
+  updatedAt     DateTime    @updatedAt
+
+  run    ReportRun? @relation(fields: [runId], references: [id], onDelete: SetNull)
+  parent Parent?    @relation(fields: [parentId], references: [id], onDelete: SetNull)
+
+  @@index([status, nextAttemptAt])
+  @@index([runId])
+}
+
+// ---------------------------------------------------------------------------
+// Library and study notes (added after the 10-day plan)
+// ---------------------------------------------------------------------------
+
+model Book {
+  id           String   @id @default(cuid())
+  title        String
+  author       String
+  isbn         String?  @unique
+  publisher    String?
+  edition      String?
+  category     String // Textbook, Reference, Novel, Journal...
+  departmentId String? // empty = general collection
+  shelf        String? // e.g. "BCA-R2-S3"
+  totalCopies  Int      @default(1)
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  department Department? @relation(fields: [departmentId], references: [id])
+  loans      BookLoan[]
+
+  @@index([title])
+}
+
+model BookLoan {
+  id         String     @id @default(cuid())
+  bookId     String
+  studentId  String
+  issuedById String
+  issuedAt   DateTime   @default(now())
+  dueDate    String // YYYY-MM-DD
+  returnedAt DateTime?
+  renewals   Int        @default(0)
+  fine       Int        @default(0) // rupees, fixed on return
+  finePaid   Boolean    @default(false)
+  status     LoanStatus @default(ISSUED)
+  remindedOn String? // last reminder date, so reminders go once a day
+
+  book    Book    @relation(fields: [bookId], references: [id], onDelete: Cascade)
+  student Student @relation(fields: [studentId], references: [id], onDelete: Cascade)
+
+  @@index([status, dueDate])
+  @@index([studentId])
+}
+
+// Study notes uploaded by teachers for a subject; students of that
+// department and year (and section, if set) can view and download them.
+model Note {
+  id           String   @id @default(cuid())
+  title        String
+  description  String?
+  tags         String? // comma separated, for search
+  subjectId    String
+  departmentId String
+  year         Int
+  sectionId    String? // empty = every section of that year
+  uploadedById String
+  filePath     String
+  fileName     String
+  fileMime     String
+  fileSize     Int
+  downloads    Int      @default(0)
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  subject    Subject    @relation(fields: [subjectId], references: [id])
+  department Department @relation(fields: [departmentId], references: [id])
+
+  @@index([departmentId, year])
 }
 
 // ---------------------------------------------------------------------------

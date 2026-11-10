@@ -54,7 +54,7 @@ function NavList({ items, layout, pathname }: Props & { pathname: string | null 
               href={item.href}
               aria-current={active ? "page" : undefined}
               className={`block rounded-md px-3 py-2 text-sm font-medium ${
-                active ? "bg-brand-50 text-brand-700" : "text-slate-700 hover:bg-slate-100"
+                active ? "border-l-4 border-haldi-400 bg-brand-50 text-brand-700" : "text-slate-700 hover:bg-brand-50/60 hover:text-brand-700"
               }`}
             >
               {item.label}

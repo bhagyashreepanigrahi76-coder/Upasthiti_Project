@@ -37,6 +37,9 @@ export async function UserMenu({ current }: { current: PortalKey }) {
           <span className="ml-1.5 rounded-full bg-red-600 px-1.5 py-0.5 text-[10px] font-semibold text-white">{unread > 99 ? "99+" : unread}</span>
         )}
       </Link>
+      <Link href="/account/security" className="rounded-md border border-slate-200 px-2.5 py-1.5 text-xs font-medium text-slate-700 hover:bg-slate-50">
+        Account
+      </Link>
       <div className="text-right leading-tight">
         <p className="text-sm font-medium text-slate-900">{user.name}</p>
         <p className="text-xs text-slate-500">

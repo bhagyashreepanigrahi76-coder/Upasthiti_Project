@@ -1,16 +1,33 @@
 @import "tailwindcss";
 
-/* System fonts: no download needed, fast on low-end phones (PRD §7). */
+/*
+ * Sambalpuri theme: colours and motifs from Sambalpuri ikat (bandha)
+ * handloom of western Odisha. Sindoori maroon and haldi (turmeric) yellow on
+ * an undyed-cotton cream, with black accents; the ikat diamond band, the
+ * kumbha (temple) border and the chakra motif.
+ * System fonts: no download needed, fast on low-end phones (PRD §7).
+ */
 @theme {
-  --font-sans: ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, "Noto Sans",
+  --font-sans: ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, "Noto Sans", "Noto Sans Oriya",
     "Helvetica Neue", Arial, sans-serif;
   --font-mono: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
 
-  --color-brand-50: #eef4ff;
-  --color-brand-100: #dbe6fe;
-  --color-brand-600: #2f5bd8;
-  --color-brand-700: #2549b3;
-  --color-brand-900: #1a2f6b;
+  /* Sindoori maroon: the main colour (white text on 600/700 is AA-compliant) */
+  --color-brand-50: #fbf1ef;
+  --color-brand-100: #f4dcd8;
+  --color-brand-600: #8f2533;
+  --color-brand-700: #7a1f2b;
+  --color-brand-900: #4a121a;
+
+  /* Haldi yellow: accents only, never body text on white */
+  --color-haldi-50: #fdf6e3;
+  --color-haldi-100: #f9e7b5;
+  --color-haldi-400: #e0a526;
+  --color-haldi-600: #a8740c;
+
+  /* Undyed cotton and kajal black */
+  --color-cream: #fbf7f0;
+  --color-kajal: #1c1917;
 }
 
 html {
@@ -18,7 +35,37 @@ html {
 }
 
 body {
-  background: #f6f7f9;
+  background: var(--color-cream);
   color: #1c2230;
   font-family: var(--font-sans);
+}
+
+/* Ikat diamond band: woven strip used at the top of portals and cards. */
+.sambalpuri-band {
+  background-color: #7a1f2b;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='32' height='14' viewBox='0 0 32 14'%3E%3Crect width='32' height='14' fill='%237a1f2b'/%3E%3Cpath d='M0 7 8 1l8 6-8 6zM16 7l8-6 8 6-8 6z' fill='none' stroke='%23f6efe3' stroke-width='1.2'/%3E%3Cpath d='M8 4.5 10.5 7 8 9.5 5.5 7zM24 4.5 26.5 7 24 9.5 21.5 7z' fill='%23e0a526'/%3E%3Crect x='15' y='6' width='2' height='2' fill='%23f6efe3'/%3E%3C/svg%3E");
+  background-repeat: repeat-x;
+  background-position: center;
+  background-size: auto 100%;
+}
+
+/* Kumbha (temple) border: row of temple spires, used under page titles. */
+.temple-border {
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='16' height='8' viewBox='0 0 16 8'%3E%3Cpath d='M0 8 8 0l8 8z' fill='%237a1f2b'/%3E%3Cpath d='M4 8l4-4 4 4z' fill='%23e0a526'/%3E%3C/svg%3E");
+  background-repeat: repeat-x;
+  background-size: auto 100%;
+}
+
+/* Faint ikat texture for large backgrounds (sign-in, home). */
+.ikat-texture {
+  background-color: var(--color-cream);
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='48' height='48' viewBox='0 0 48 48'%3E%3Cg fill='none' stroke='%237a1f2b' stroke-opacity='.07' stroke-width='1.5'%3E%3Cpath d='M24 6 42 24 24 42 6 24z'/%3E%3Cpath d='M24 16 32 24 24 32 16 24z'/%3E%3C/g%3E%3Ccircle cx='24' cy='24' r='2' fill='%23e0a526' fill-opacity='.18'/%3E%3C/svg%3E");
+}
+
+@media print {
+  .sambalpuri-band,
+  .temple-border {
+    print-color-adjust: exact;
+    -webkit-print-color-adjust: exact;
+  }
 }

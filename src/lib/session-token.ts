@@ -45,3 +45,27 @@ export async function verifySession(token: string | undefined): Promise<SessionP
     return null;
   }
 }
+
+// Short-lived token between "password correct" and "code verified" for
+// staff who use two-step sign-in (FR-3). It is not a session.
+export const PENDING_2FA_COOKIE = "cas_2fa";
+export const PENDING_2FA_SECONDS = 10 * 60;
+
+export async function signPending2fa(userId: string): Promise<string> {
+  return new SignJWT({ pur: "2fa" })
+    .setProtectedHeader({ alg: "HS256" })
+    .setSubject(userId)
+    .setIssuedAt()
+    .setExpirationTime(`${PENDING_2FA_SECONDS}s`)
+    .sign(secretKey());
+}
+
+export async function verifyPending2fa(token: string | undefined): Promise<string | null> {
+  if (!token) return null;
+  try {
+    const { payload } = await jwtVerify(token, secretKey(), { algorithms: ["HS256"] });
+    return payload.pur === "2fa" && typeof payload.sub === "string" ? payload.sub : null;
+  } catch {
+    return null;
+  }
+}

@@ -2,6 +2,7 @@ import { NextResponse, type NextRequest } from "next/server";
 import { currentUserForApi } from "@/lib/auth";
 import { db } from "@/lib/db";
 import { processPunch, punchInputSchema } from "@/lib/punch";
+import { hit } from "@/lib/rate-limit";
 
 // POST /api/punch: punch in/out or a dry-run status check (FR-7, FR-31).
 // Called by the student app with fetch, including queued offline punches.
@@ -16,6 +17,9 @@ export async function POST(request: NextRequest) {
   const user = await currentUserForApi();
   if (!user) return NextResponse.json({ error: "Please sign in again." }, { status: 401 });
   if (!user.roles.includes("STUDENT")) return NextResponse.json({ error: "Only students can punch." }, { status: 403 });
+  // PRD §7 rate limiting: a real student needs a handful of requests a day.
+  const limit = hit(`punch:${user.id}`, 20, 60_000);
+  if (!limit.ok) return NextResponse.json({ error: `Too many attempts. Wait ${limit.retryAfterSec} seconds.` }, { status: 429, headers: { "Retry-After": String(limit.retryAfterSec) } });
 
   const student = await db.student.findUnique({
     where: { userId: user.id },

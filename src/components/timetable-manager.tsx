@@ -304,7 +304,7 @@ export async function SectionEditor({
               Columns: <code>day, period, span, type, subject, teacher, room, batch</code>. Day is Mon-Sat, subject is the
               code, teacher is the college ID. The import replaces the grid for the chosen date, after a clash check.
             </p>
-            <ActionForm action={importTimetable} submitLabel="Import" encType="multipart/form-data" className="space-y-3">
+            <ActionForm action={importTimetable} submitLabel="Import" className="space-y-3">
               <input type="hidden" name="sectionId" value={section.id} />
               <FieldGrid>
                 <Field label="In force from" name="effectiveFrom">

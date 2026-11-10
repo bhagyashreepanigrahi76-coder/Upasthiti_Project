@@ -73,6 +73,11 @@ export async function effectiveTimetables(dateKey: string) {
 export type ScheduledPeriod = {
   key: string;
   slotId: string | null;
+  /** Stable ID of this period on this date: slot ID, or "x:<changeId>" for extra classes. */
+  periodKey: string;
+  teacherId: string | null; // who takes it today (the substitute, if any)
+  subjectId: string | null;
+  batchId: string | null;
   sectionId: string;
   sectionLabel: string;
   periodNumber: number;
@@ -119,6 +124,10 @@ export async function sectionDay(sectionId: string, dateKey: string, batchId?: s
       return {
         key: s.id,
         slotId: s.id,
+        periodKey: s.id,
+        teacherId: change?.type === "SUBSTITUTED" ? change.substituteTeacherId : s.teacherId,
+        subjectId: s.subjectId,
+        batchId: s.batchId,
         sectionId,
         sectionLabel: label,
         periodNumber: s.periodNumber,
@@ -137,6 +146,10 @@ export async function sectionDay(sectionId: string, dateKey: string, batchId?: s
     periods.push({
       key: c.id,
       slotId: null,
+      periodKey: `x:${c.id}`,
+      teacherId: c.substituteTeacherId,
+      subjectId: c.subjectId,
+      batchId: null,
       sectionId,
       sectionLabel: label,
       periodNumber: c.periodNumber,
@@ -188,6 +201,10 @@ export async function teacherDay(teacherId: string, dateKey: string): Promise<Sc
       out.push({
         key: s.id,
         slotId: s.id,
+        periodKey: s.id,
+        teacherId: s.teacherId,
+        subjectId: s.subjectId,
+        batchId: s.batchId,
         sectionId: tt.sectionId,
         sectionLabel: sectionLabel(tt.section),
         periodNumber: s.periodNumber,
@@ -209,6 +226,10 @@ export async function teacherDay(teacherId: string, dateKey: string): Promise<Sc
     out.push({
       key: c.id,
       slotId: s?.id ?? null,
+      periodKey: c.type === "EXTRA" ? `x:${c.id}` : (s?.id ?? c.id),
+      teacherId: c.substituteTeacherId,
+      subjectId: c.subjectId ?? s?.subjectId ?? null,
+      batchId: s?.batchId ?? null,
       sectionId: c.sectionId,
       sectionLabel: sectionLabel(c.section),
       periodNumber: c.periodNumber,

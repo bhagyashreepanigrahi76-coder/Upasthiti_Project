@@ -9,8 +9,10 @@ import { Badge, Card, EmptyState, PageHeader, Table, td } from "@/components/ui"
 import { ActionButton, ActionForm } from "@/components/forms";
 import { Field, FieldGrid, Input, Select } from "@/components/form-fields";
 import {
+  addParentContact,
   addRole,
   removeRole,
+  setCriticalOptOut,
   resetUserPassword,
   setUserActive,
   unlockUser,
@@ -167,7 +169,7 @@ export default async function UserDetailPage({ params }: Props) {
                 <Field label="Role" name="role">
                   <Select
                     name="role"
-                    options={(user.teacher ? ["HOD", "MENTOR", "TEACHER", "ADMIN"] : ["ADMIN"]).map((r) => ({
+                    options={(user.teacher ? ["HOD", "MENTOR", "TEACHER", "ADMIN", "LIBRARIAN"] : ["ADMIN", "LIBRARIAN"]).map((r) => ({
                       value: r,
                       label: ROLE_LABELS[r as keyof typeof ROLE_LABELS],
                     }))}
@@ -219,12 +221,39 @@ export default async function UserDetailPage({ params }: Props) {
             <h3 className="mb-2 mt-5 text-sm font-semibold text-slate-800">Parents / guardians</h3>
             <ul className="space-y-1 text-sm">
               {user.student.parents.map((p) => (
-                <li key={p.parentId}>
-                  {p.parent.name} <span className="text-slate-500">({p.relationship})</span> · {p.parent.email}
-                  {p.parent.phone && ` · ${p.parent.phone}`}
+                <li key={p.parentId} className="flex flex-wrap items-center justify-between gap-2">
+                  <span>
+                    {p.parent.name} <span className="text-slate-500">({p.relationship})</span> · {p.parent.email}
+                    {p.parent.phone && ` · ${p.parent.phone}`}
+                    {p.parent.unsubscribedNonCritical && <Badge tone="amber">Monthly reports off</Badge>}
+                    {p.parent.criticalOptOutApproved && <Badge tone="red">No critical alerts</Badge>}
+                  </span>
+                  <ActionButton
+                    action={setCriticalOptOut}
+                    fields={{ id: p.parentId, allow: String(!p.parent.criticalOptOutApproved) }}
+                    label={p.parent.criticalOptOutApproved ? "Turn critical alerts back on" : "Approve opt-out of critical alerts"}
+                    confirmText={p.parent.criticalOptOutApproved ? undefined : "Stop critical attendance alerts to this parent?"}
+                  />
                 </li>
               ))}
             </ul>
+            <ActionForm action={addParentContact} submitLabel="Add parent contact" resetOnSuccess className="mt-4 space-y-3 border-t border-slate-100 pt-3">
+              <input type="hidden" name="studentId" value={user.student.id} />
+              <FieldGrid>
+                <Field label="Name" name="name">
+                  <Input name="name" />
+                </Field>
+                <Field label="Relationship" name="relationship">
+                  <Select name="relationship" options={["Guardian", "Father", "Mother"].map((r) => ({ value: r, label: r }))} />
+                </Field>
+                <Field label="Email" name="email">
+                  <Input name="email" type="email" />
+                </Field>
+                <Field label="Phone" name="phone">
+                  <Input name="phone" type="tel" />
+                </Field>
+              </FieldGrid>
+            </ActionForm>
           </Card>
         )}
 

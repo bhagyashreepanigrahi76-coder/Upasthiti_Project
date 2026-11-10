@@ -2,7 +2,11 @@
 // WARNING: wipes all existing data first. Never run against production.
 import { PrismaClient, type Role } from "@prisma/client";
 import bcrypt from "bcryptjs";
+import { randomUUID } from "node:crypto";
+import { mkdirSync, writeFileSync } from "node:fs";
+import path from "node:path";
 import { addDays, toDateKey, weekdayOf } from "../src/lib/dates";
+import { PRIVACY_VERSION } from "../src/lib/privacy";
 
 const db = new PrismaClient();
 const DEMO_PASSWORD = "Demo@1234";
@@ -20,6 +24,18 @@ async function main() {
 
   console.log("Clearing existing data…");
   await db.$transaction([
+    db.bookLoan.deleteMany(),
+    db.book.deleteMany(),
+    db.note.deleteMany(),
+    db.noticeRead.deleteMany(),
+    db.noticeHistory.deleteMany(),
+    db.notice.deleteMany(),
+    db.markRevision.deleteMany(),
+    db.markEntry.deleteMany(),
+    db.assessment.deleteMany(),
+    db.attendanceEditRequest.deleteMany(),
+    db.attendanceRecord.deleteMany(),
+    db.classSession.deleteMany(),
     db.periodChange.deleteMany(),
     db.timetableSlot.deleteMany(),
     db.timetable.deleteMany(),
@@ -64,10 +80,10 @@ async function main() {
   });
 
   const cs = await db.department.create({
-    data: { code: "CS", name: "Computer Science", programme: "B.Sc. Computer Science" },
+    data: { code: "BCA", name: "Computer Applications", programme: "Bachelor of Computer Applications (BCA)" },
   });
   const com = await db.department.create({
-    data: { code: "COM", name: "Commerce", programme: "B.Com." },
+    data: { code: "BBA", name: "Business Administration", programme: "Bachelor of Business Administration (BBA)" },
   });
 
   const section = (departmentId: string, year: number, name: string) =>
@@ -85,22 +101,22 @@ async function main() {
 
   const subjectRows: [string, string, string, number, number, "THEORY" | "PRACTICAL"][] = [
     // code, name, deptId, year, semester, type
-    ["CS101", "Programming in C", cs.id, 1, 1, "THEORY"],
-    ["CS102", "Digital Electronics", cs.id, 1, 1, "THEORY"],
-    ["CS103", "Discrete Mathematics", cs.id, 1, 1, "THEORY"],
-    ["CS104", "C Programming Lab", cs.id, 1, 1, "PRACTICAL"],
-    ["CS201", "Data Structures", cs.id, 2, 3, "THEORY"],
-    ["CS202", "Database Management Systems", cs.id, 2, 3, "THEORY"],
-    ["CS203", "Data Structures Lab", cs.id, 2, 3, "PRACTICAL"],
-    ["CS301", "Operating Systems", cs.id, 3, 5, "THEORY"],
-    ["CS302", "Computer Networks", cs.id, 3, 5, "THEORY"],
-    ["CS303", "Web Technologies Lab", cs.id, 3, 5, "PRACTICAL"],
-    ["COM101", "Financial Accounting", com.id, 1, 1, "THEORY"],
-    ["COM102", "Business Economics", com.id, 1, 1, "THEORY"],
-    ["COM201", "Corporate Accounting", com.id, 2, 3, "THEORY"],
-    ["COM202", "Business Law", com.id, 2, 3, "THEORY"],
-    ["COM301", "Income Tax", com.id, 3, 5, "THEORY"],
-    ["COM302", "Auditing", com.id, 3, 5, "THEORY"],
+    ["BCA101", "Programming in C", cs.id, 1, 1, "THEORY"],
+    ["BCA102", "Digital Electronics", cs.id, 1, 1, "THEORY"],
+    ["BCA103", "Discrete Mathematics", cs.id, 1, 1, "THEORY"],
+    ["BCA104", "C Programming Lab", cs.id, 1, 1, "PRACTICAL"],
+    ["BCA201", "Data Structures", cs.id, 2, 3, "THEORY"],
+    ["BCA202", "Database Management Systems", cs.id, 2, 3, "THEORY"],
+    ["BCA203", "Data Structures Lab", cs.id, 2, 3, "PRACTICAL"],
+    ["BCA301", "Operating Systems", cs.id, 3, 5, "THEORY"],
+    ["BCA302", "Computer Networks", cs.id, 3, 5, "THEORY"],
+    ["BCA303", "Web Technologies Lab", cs.id, 3, 5, "PRACTICAL"],
+    ["BBA101", "Principles of Management", com.id, 1, 1, "THEORY"],
+    ["BBA102", "Business Economics", com.id, 1, 1, "THEORY"],
+    ["BBA201", "Marketing Management", com.id, 2, 3, "THEORY"],
+    ["BBA202", "Business Law", com.id, 2, 3, "THEORY"],
+    ["BBA301", "Financial Management", com.id, 3, 5, "THEORY"],
+    ["BBA302", "Human Resource Management", com.id, 3, 5, "THEORY"],
   ];
   const subj: Record<string, string> = {};
   for (const [code, name, departmentId, year, semester, type] of subjectRows) {
@@ -138,7 +154,7 @@ async function main() {
       departmentId: cs.id,
       designation: "Professor & HOD",
       roles: [{ role: "TEACHER", departmentId: cs.id }, { role: "HOD", departmentId: cs.id }],
-      teaches: [["CS201", sec.cs2A.id], ["CS301", sec.cs3A.id]],
+      teaches: [["BCA201", sec.cs2A.id], ["BCA301", sec.cs3A.id]],
     },
     {
       collegeId: "T1002",
@@ -149,7 +165,7 @@ async function main() {
         { role: "TEACHER", departmentId: cs.id },
         { role: "MENTOR", departmentId: cs.id, year: 1, sectionId: sec.cs1A.id },
       ],
-      teaches: [["CS101", sec.cs1A.id], ["CS104", sec.cs1A.id], ["CS101", sec.cs1B.id], ["CS104", sec.cs1B.id]],
+      teaches: [["BCA101", sec.cs1A.id], ["BCA104", sec.cs1A.id], ["BCA101", sec.cs1B.id], ["BCA104", sec.cs1B.id]],
     },
     {
       collegeId: "T1003",
@@ -158,8 +174,8 @@ async function main() {
       designation: "Assistant Professor",
       roles: [{ role: "TEACHER", departmentId: cs.id }],
       teaches: [
-        ["CS102", sec.cs1A.id], ["CS103", sec.cs1A.id], ["CS102", sec.cs1B.id], ["CS103", sec.cs1B.id],
-        ["CS202", sec.cs2A.id], ["CS203", sec.cs2A.id], ["CS302", sec.cs3A.id], ["CS303", sec.cs3A.id],
+        ["BCA102", sec.cs1A.id], ["BCA103", sec.cs1A.id], ["BCA102", sec.cs1B.id], ["BCA103", sec.cs1B.id],
+        ["BCA202", sec.cs2A.id], ["BCA203", sec.cs2A.id], ["BCA302", sec.cs3A.id], ["BCA303", sec.cs3A.id],
       ],
     },
     {
@@ -168,7 +184,7 @@ async function main() {
       departmentId: com.id,
       designation: "Professor & HOD",
       roles: [{ role: "TEACHER", departmentId: com.id }, { role: "HOD", departmentId: com.id }],
-      teaches: [["COM301", sec.com3A.id], ["COM302", sec.com3A.id]],
+      teaches: [["BBA301", sec.com3A.id], ["BBA302", sec.com3A.id]],
     },
     {
       collegeId: "T2002",
@@ -180,7 +196,7 @@ async function main() {
         { role: "MENTOR", departmentId: com.id, year: 1, sectionId: sec.com1A.id },
       ],
       teaches: [
-        ["COM101", sec.com1A.id], ["COM102", sec.com1A.id], ["COM201", sec.com2A.id], ["COM202", sec.com2A.id],
+        ["BBA101", sec.com1A.id], ["BBA102", sec.com1A.id], ["BBA201", sec.com2A.id], ["BBA202", sec.com2A.id],
       ],
     },
   ];
@@ -211,13 +227,13 @@ async function main() {
   // --- Students and parents ---------------------------------------------------
   // [section, dept code, year, admission year, how many, mentor collegeId]
   const cohorts: [typeof sec.cs1A, string, number, number, number, string | null][] = [
-    [sec.cs1A, "CS", 1, 2026, 8, "T1002"],
-    [sec.cs1B, "CS", 1, 2026, 4, null],
-    [sec.cs2A, "CS", 2, 2025, 4, null],
-    [sec.cs3A, "CS", 3, 2024, 4, null],
-    [sec.com1A, "COM", 1, 2026, 4, "T2002"],
-    [sec.com2A, "COM", 2, 2025, 2, null],
-    [sec.com3A, "COM", 3, 2024, 2, null],
+    [sec.cs1A, "BCA", 1, 2026, 8, "T1002"],
+    [sec.cs1B, "BCA", 1, 2026, 4, null],
+    [sec.cs2A, "BCA", 2, 2025, 4, null],
+    [sec.cs3A, "BCA", 3, 2024, 4, null],
+    [sec.com1A, "BBA", 1, 2026, 4, "T2002"],
+    [sec.com2A, "BBA", 2, 2025, 2, null],
+    [sec.com3A, "BBA", 3, 2024, 2, null],
   ];
 
   let nameIndex = 0;
@@ -269,7 +285,7 @@ async function main() {
   // One parent with a login, linked to two children (siblings in Year 1 and Year 3).
   await db.user.create({
     data: {
-      collegeId: "P26CS001",
+      collegeId: "P26BCA001",
       name: "Sunita Sharma",
       email: "sunita.sharma@example.com",
       passwordHash,
@@ -282,8 +298,8 @@ async function main() {
           phone: "+91 98000 12345",
           students: {
             create: [
-              { studentId: studentIds["S26CS001"], relationship: "Mother" },
-              { studentId: studentIds["S24CS001"], relationship: "Mother" },
+              { studentId: studentIds["S26BCA001"], relationship: "Mother" },
+              { studentId: studentIds["S24BCA001"], relationship: "Mother" },
             ],
           },
         },
@@ -347,20 +363,20 @@ async function main() {
   type SeedSlot = [day: number, period: number, span: number, subject: string, teacher: string, room: string, batch?: string];
   const timetables: [typeof sec.cs1A, SeedSlot[]][] = [
     [sec.cs1A, [
-      [1, 1, 1, "CS101", "T1002", "CR-101"], [1, 2, 1, "CS102", "T1003", "CR-101"], [1, 3, 1, "CS103", "T1003", "CR-101"],
-      [1, 5, 2, "CS104", "T1002", "LAB-1", b1.id],
-      [2, 1, 1, "CS102", "T1003", "CR-101"], [2, 2, 1, "CS101", "T1002", "CR-101"], [2, 3, 1, "CS103", "T1003", "CR-101"],
-      [2, 5, 2, "CS104", "T1002", "LAB-1", b2.id],
-      [3, 1, 1, "CS103", "T1003", "CR-101"], [3, 2, 1, "CS101", "T1002", "CR-101"], [3, 4, 1, "CS102", "T1003", "CR-101"],
-      [4, 1, 1, "CS101", "T1002", "CR-101"], [4, 2, 1, "CS103", "T1003", "CR-101"], [4, 3, 1, "CS102", "T1003", "CR-101"],
-      [5, 1, 1, "CS102", "T1003", "CR-101"], [5, 2, 1, "CS101", "T1002", "CR-101"], [5, 3, 1, "CS103", "T1003", "CR-101"],
+      [1, 1, 1, "BCA101", "T1002", "CR-101"], [1, 2, 1, "BCA102", "T1003", "CR-101"], [1, 3, 1, "BCA103", "T1003", "CR-101"],
+      [1, 5, 2, "BCA104", "T1002", "LAB-1", b1.id],
+      [2, 1, 1, "BCA102", "T1003", "CR-101"], [2, 2, 1, "BCA101", "T1002", "CR-101"], [2, 3, 1, "BCA103", "T1003", "CR-101"],
+      [2, 5, 2, "BCA104", "T1002", "LAB-1", b2.id],
+      [3, 1, 1, "BCA103", "T1003", "CR-101"], [3, 2, 1, "BCA101", "T1002", "CR-101"], [3, 4, 1, "BCA102", "T1003", "CR-101"],
+      [4, 1, 1, "BCA101", "T1002", "CR-101"], [4, 2, 1, "BCA103", "T1003", "CR-101"], [4, 3, 1, "BCA102", "T1003", "CR-101"],
+      [5, 1, 1, "BCA102", "T1003", "CR-101"], [5, 2, 1, "BCA101", "T1002", "CR-101"], [5, 3, 1, "BCA103", "T1003", "CR-101"],
     ]],
     [sec.cs2A, [
-      [1, 1, 1, "CS201", "T1001", "CR-102"], [1, 4, 1, "CS202", "T1003", "CR-102"],
-      [2, 2, 1, "CS202", "T1003", "CR-102"], [2, 3, 1, "CS201", "T1001", "CR-102"],
-      [3, 2, 1, "CS201", "T1001", "CR-102"], [3, 3, 1, "CS202", "T1003", "CR-102"], [3, 5, 2, "CS203", "T1003", "LAB-2"],
-      [4, 1, 1, "CS201", "T1001", "CR-102"], [4, 4, 1, "CS202", "T1003", "CR-102"],
-      [5, 2, 1, "CS202", "T1003", "CR-102"], [5, 4, 1, "CS201", "T1001", "CR-102"],
+      [1, 1, 1, "BCA201", "T1001", "CR-102"], [1, 4, 1, "BCA202", "T1003", "CR-102"],
+      [2, 2, 1, "BCA202", "T1003", "CR-102"], [2, 3, 1, "BCA201", "T1001", "CR-102"],
+      [3, 2, 1, "BCA201", "T1001", "CR-102"], [3, 3, 1, "BCA202", "T1003", "CR-102"], [3, 5, 2, "BCA203", "T1003", "LAB-2"],
+      [4, 1, 1, "BCA201", "T1001", "CR-102"], [4, 4, 1, "BCA202", "T1003", "CR-102"],
+      [5, 2, 1, "BCA202", "T1003", "CR-102"], [5, 4, 1, "BCA201", "T1001", "CR-102"],
     ]],
   ];
   for (const [s, slots] of timetables) {
@@ -369,7 +385,7 @@ async function main() {
         sectionId: s.id,
         academicYearId: ay.id,
         semester: s.year * 2 - 1,
-        effectiveFrom: monday,
+        effectiveFrom: addDays(monday, -21), // three weeks back, so the demo attendance days are covered
         note: "Demo timetable",
         slots: {
           create: slots.map(([dayOfWeek, periodNumber, span, code, teacher, r, batchId]) => ({
@@ -404,13 +420,232 @@ async function main() {
   while (weekdayOf(lastWorkday) > 5) lastWorkday = addDays(lastWorkday, -1);
   await db.campusSession.create({
     data: {
-      studentId: studentIds["S26CS001"],
+      studentId: studentIds["S26BCA001"],
       dateKey: lastWorkday,
       inAt: new Date(`${lastWorkday}T03:40:00Z`), // 09:10 IST
       status: "INCOMPLETE",
       closedReason: "No punch-out before the cut-off",
     },
   });
+
+  // --- Day 6: two weeks of class attendance for CS 1-A -------------------------
+  // Deterministic "random" so every seed gives the same picture: S26BCA008 is
+  // critical, S26BCA007 is below 75 %, S26BCA005 was marked present one day
+  // without a campus punch.
+  const teacherUser = new Map((await db.teacher.findMany({ select: { id: true, userId: true } })).map((t) => [t.id, t.userId]));
+  const roster1A = await db.student.findMany({ where: { sectionId: sec.cs1A.id }, orderBy: { rollNo: "asc" } });
+  const slots1A = await db.timetableSlot.findMany({ where: { timetable: { sectionId: sec.cs1A.id } } });
+  const absentRate = (i: number) => (i === 7 ? 75 : i === 6 ? 35 : i === 5 ? 12 : 5);
+  const roll = (i: number, d: string, p: number) => {
+    let h = 2166136261;
+    for (const ch of `${i}|${d}|${p}`) h = Math.imul(h ^ ch.charCodeAt(0), 16777619);
+    return (h >>> 0) % 100;
+  };
+  const pastDays: string[] = [];
+  for (let d = addDays(today, -1); pastDays.length < 10; d = addDays(d, -1)) if (weekdayOf(d) <= 5) pastDays.push(d);
+  for (const [dayIndex, d] of pastDays.entries()) {
+    const onCampus = new Set<string>();
+    for (const slot of slots1A.filter((s) => s.dayOfWeek === weekdayOf(d))) {
+      const students = roster1A.filter((s) => !slot.batchId || s.batchId === slot.batchId);
+      const takenBy = teacherUser.get(slot.teacherId!)!;
+      await db.classSession.create({
+        data: {
+          dateKey: d,
+          periodKey: slot.id,
+          sectionId: sec.cs1A.id,
+          subjectId: slot.subjectId,
+          batchId: slot.batchId,
+          periodNumber: slot.periodNumber,
+          span: slot.span,
+          teacherId: slot.teacherId!,
+          takenById: takenBy,
+          takenAt: new Date(`${d}T05:00:00Z`),
+          records: {
+            create: students.map((s) => {
+              const i = roster1A.findIndex((r) => r.id === s.id);
+              const v = roll(i, d, slot.periodNumber);
+              const status = v < absentRate(i) ? ("ABSENT" as const) : v < absentRate(i) + 6 ? ("LATE" as const) : ("PRESENT" as const);
+              if (status !== "ABSENT") onCampus.add(s.id);
+              return { studentId: s.id, status, markedById: takenBy };
+            }),
+          },
+        },
+      });
+    }
+    for (const sid of onCampus) {
+      if (sid === studentIds["S26BCA001"] && d === lastWorkday) continue; // keeps the incomplete day to regularise
+      if (sid === roster1A[4].id && dayIndex === 1) continue; // marked present, but no campus punch
+      await db.campusSession.create({
+        data: { studentId: sid, dateKey: d, inAt: new Date(`${d}T03:25:00Z`), outAt: new Date(`${d}T10:35:00Z`), status: "COMPLETE", minutesOnCampus: 430 },
+      });
+    }
+  }
+
+  // --- Day 7: one published result, one waiting for the HOD, one draft --------
+  const adminId = admin.id;
+  const t1002User = teacherUser.get(T["T1002"])!;
+  const t1003User = teacherUser.get(T["T1003"])!;
+  const t1001User = teacherUser.get(T["T1001"])!;
+  const published = await db.assessment.create({
+    data: {
+      subjectId: subj["BCA101"], sectionId: sec.cs1A.id, academicYearId: ay.id, kind: "INTERNAL1", maxMarks: 25, weightage: 15,
+      status: "PUBLISHED", submittedById: t1002User, submittedAt: new Date(Date.now() - 5 * 86400_000),
+      verifiedById: t1001User, verifiedAt: new Date(Date.now() - 4 * 86400_000), lockedById: adminId, lockedAt: new Date(Date.now() - 3 * 86400_000),
+      publishAt: new Date(Date.now() - 2 * 86400_000), publishedAt: new Date(Date.now() - 2 * 86400_000), notifiedAt: new Date(Date.now() - 2 * 86400_000),
+    },
+  });
+  const submitted = await db.assessment.create({
+    data: {
+      subjectId: subj["BCA102"], sectionId: sec.cs1A.id, academicYearId: ay.id, kind: "INTERNAL1", maxMarks: 25, weightage: 15,
+      status: "SUBMITTED", submittedById: t1003User, submittedAt: new Date(Date.now() - 86400_000),
+    },
+  });
+  const draft = await db.assessment.create({
+    data: { subjectId: subj["BCA101"], sectionId: sec.cs1A.id, academicYearId: ay.id, kind: "ASSIGNMENT", maxMarks: 10, weightage: 10 },
+  });
+  for (const [i, s] of roster1A.entries()) {
+    await db.markEntry.create({ data: { assessmentId: published.id, studentId: s.id, marks: i === 7 ? null : i === 6 ? 8 : 14 + ((i * 7) % 11), absent: i === 7, updatedById: t1002User } });
+    await db.markEntry.create({ data: { assessmentId: submitted.id, studentId: s.id, marks: 12 + ((i * 5) % 13), absent: false, updatedById: t1003User } });
+    if (i < 4) await db.markEntry.create({ data: { assessmentId: draft.id, studentId: s.id, marks: 6 + (i % 4), absent: false, updatedById: t1002User } });
+  }
+
+  // --- Day 8: notices ---------------------------------------------------------
+  const examEvent = await db.calendarEvent.findFirst({ where: { title: "Internal Assessment 1" } });
+  const hodCs = await db.user.findUnique({ where: { collegeId: "T1001" } });
+  await db.notice.create({
+    data: {
+      title: "Welcome to the 2026-27 academic year",
+      body: "Classes run Monday to Friday, 09:00 to 15:30. Punch in on the app when you reach campus and punch out when you leave.\n\nCheck this board for exam schedules, holidays and events.",
+      category: "GENERAL", audience: "EVERYONE", isPublic: true, pinned: true, createdById: adminId, notifiedAt: new Date(),
+    },
+  });
+  await db.notice.create({
+    data: {
+      title: "Internal Assessment 1 timetable",
+      body: "Internal Assessment 1 for all Year 1 students starts on the date shown in the calendar. Bring your ID card; latecomers will not be allowed after 15 minutes.",
+      category: "EXAM", audience: "STUDENTS", year: 1, urgent: true, calendarEventId: examEvent?.id, createdById: adminId, notifiedAt: new Date(),
+    },
+  });
+  await db.notice.create({
+    data: {
+      title: "Department meeting on Friday",
+      body: "All BCA teachers: department meeting on Friday at 15:45 in CR-101 to plan Internal Assessment 1.",
+      category: "GENERAL", audience: "TEACHERS", departmentId: cs.id, createdById: hodCs!.id, notifiedAt: new Date(),
+    },
+  });
+
+  // --- Library: librarian, catalogue, loans (one overdue) ------------------------
+  const librarian = await db.user.create({
+    data: {
+      collegeId: "L1001",
+      name: "Ramesh Patra",
+      email: "library@college.example.edu",
+      passwordHash,
+      mustChangePassword: false,
+      roles: { create: [{ role: "LIBRARIAN" }] },
+    },
+  });
+  const bookRows: [string, string, string, string | null, string | null, string, number][] = [
+    // title, author, category, edition, dept (code), shelf, copies
+    ["Let Us C", "Yashavant Kanetkar", "Textbook", "17th ed.", "BCA", "BCA-R1-S1", 6],
+    ["Programming in ANSI C", "E. Balagurusamy", "Textbook", "8th ed.", "BCA", "BCA-R1-S1", 4],
+    ["Data Structures Through C", "Yashavant Kanetkar", "Textbook", "4th ed.", "BCA", "BCA-R1-S2", 3],
+    ["Database System Concepts", "Silberschatz, Korth, Sudarshan", "Textbook", "7th ed.", "BCA", "BCA-R1-S3", 3],
+    ["Operating System Concepts", "Silberschatz, Galvin, Gagne", "Textbook", "10th ed.", "BCA", "BCA-R2-S1", 3],
+    ["Computer Networks", "Andrew S. Tanenbaum", "Textbook", "5th ed.", "BCA", "BCA-R2-S2", 2],
+    ["Digital Logic and Computer Design", "M. Morris Mano", "Textbook", null, "BCA", "BCA-R2-S3", 2],
+    ["Discrete Mathematics and Its Applications", "Kenneth H. Rosen", "Reference", "8th ed.", "BCA", "BCA-R3-S1", 2],
+    ["HTML and CSS: Design and Build Websites", "Jon Duckett", "Reference", null, "BCA", "BCA-R3-S2", 1],
+    ["Principles of Management", "Harold Koontz, Heinz Weihrich", "Textbook", "11th ed.", "BBA", "BBA-R1-S1", 5],
+    ["Marketing Management", "Philip Kotler, Kevin Lane Keller", "Textbook", "16th ed.", "BBA", "BBA-R1-S2", 4],
+    ["Financial Management", "Prasanna Chandra", "Textbook", "10th ed.", "BBA", "BBA-R1-S3", 3],
+    ["Human Resource Management", "Gary Dessler", "Textbook", "16th ed.", "BBA", "BBA-R2-S1", 3],
+    ["Organizational Behavior", "Stephen P. Robbins", "Reference", "18th ed.", "BBA", "BBA-R2-S2", 2],
+    ["Business Law", "N. D. Kapoor", "Textbook", null, "BBA", "BBA-R2-S3", 3],
+    ["Managerial Economics", "D. N. Dwivedi", "Textbook", "9th ed.", "BBA", "BBA-R3-S1", 2],
+    ["Quantitative Aptitude for Competitive Examinations", "R. S. Aggarwal", "Competitive exams", null, null, "GEN-R1-S1", 4],
+    ["Wings of Fire", "A. P. J. Abdul Kalam", "Novel / general", null, null, "GEN-R2-S1", 2],
+    ["Paraja", "Gopinath Mohanty", "Novel / general", "English translation", null, "GEN-R2-S2", 1],
+  ];
+  const bookIds: Record<string, string> = {};
+  for (const [title, author, category, edition, dept, shelf, totalCopies] of bookRows) {
+    const b = await db.book.create({
+      data: { title, author, category, edition, shelf, totalCopies, departmentId: dept === "BCA" ? cs.id : dept === "BBA" ? com.id : null, publisher: null },
+    });
+    bookIds[title] = b.id;
+  }
+  const loanRows: [string, string, number, number][] = [
+    // roll no, book, issued days ago, due in days (negative = overdue)
+    ["S26BCA001", "Let Us C", 5, 9],
+    ["S26BCA002", "Programming in ANSI C", 10, 4],
+    ["S26BCA008", "Let Us C", 20, -6],
+    ["S25BCA001", "Database System Concepts", 3, 11],
+    ["S26BBA001", "Principles of Management", 7, 7],
+  ];
+  for (const [roll, title, ago, dueIn] of loanRows) {
+    await db.bookLoan.create({
+      data: {
+        bookId: bookIds[title],
+        studentId: studentIds[roll],
+        issuedById: librarian.id,
+        issuedAt: new Date(Date.now() - ago * 86_400_000),
+        dueDate: addDays(today, dueIn),
+      },
+    });
+  }
+  // One returned late with an unpaid fine.
+  await db.bookLoan.create({
+    data: {
+      bookId: bookIds["Computer Networks"],
+      studentId: studentIds["S24BCA001"],
+      issuedById: librarian.id,
+      issuedAt: new Date(Date.now() - 30 * 86_400_000),
+      dueDate: addDays(today, -16),
+      returnedAt: new Date(Date.now() - 12 * 86_400_000),
+      status: "RETURNED",
+      fine: 8,
+    },
+  });
+
+  // --- Study notes (small demo PDFs in the private uploads folder) ---------------
+  const notesDir = path.join(process.cwd(), "uploads", "notes");
+  mkdirSync(notesDir, { recursive: true });
+  const demoPdf = (title: string) =>
+    `%PDF-1.4\n1 0 obj<</Type/Catalog/Pages 2 0 R>>endobj\n2 0 obj<</Type/Pages/Kids[3 0 R]/Count 1>>endobj\n3 0 obj<</Type/Page/Parent 2 0 R/MediaBox[0 0 595 842]/Contents 4 0 R/Resources<</Font<</F1 5 0 R>>>>>>endobj\n4 0 obj<</Length ${44 + title.length}>>stream\nBT /F1 20 Tf 60 760 Td (${title.replace(/[()\\]/g, "")}) Tj ET\nendstream endobj\n5 0 obj<</Type/Font/Subtype/Type1/BaseFont/Helvetica>>endobj\ntrailer<</Root 1 0 R>>\n%%EOF\n`;
+  const noteRows: [string, string, string, string, string][] = [
+    // subject, uploader college ID, title, description, tags
+    ["BCA101", "T1002", "Unit 1: Introduction to C and data types", "Variables, constants, data types and operators with solved examples.", "data types, operators, unit 1"],
+    ["BCA101", "T1002", "Unit 2: Pointers and arrays", "Pointer arithmetic, arrays of pointers, and 20 practice questions.", "pointers, arrays, unit 2"],
+    ["BCA103", "T1003", "Sets, relations and functions: question bank", "Previous years' questions with answers.", "sets, relations, question bank"],
+    ["BCA201", "T1001", "Stacks and queues", "Array and linked-list implementations, with diagrams.", "stack, queue, linked list"],
+    ["BBA101", "T2002", "Functions of management (POSDCORB)", "Planning, organising, staffing, directing, coordinating, reporting, budgeting.", "planning, organising, posdcorb"],
+    ["BBA102", "T2002", "Demand and supply: short notes", "Law of demand, elasticity, and market equilibrium.", "demand, supply, elasticity"],
+  ];
+  const userIdOf = async (cid: string) => (await db.user.findUniqueOrThrow({ where: { collegeId: cid } })).id;
+  for (const [code, uploader, title, description, tags] of noteRows) {
+    const subject = await db.subject.findUniqueOrThrow({ where: { code } });
+    const file = `notes/${randomUUID()}.pdf`;
+    const bytes = Buffer.from(demoPdf(title));
+    writeFileSync(path.join(process.cwd(), "uploads", file), bytes);
+    await db.note.create({
+      data: {
+        title,
+        description,
+        tags,
+        subjectId: subject.id,
+        departmentId: subject.departmentId,
+        year: subject.year,
+        uploadedById: await userIdOf(uploader),
+        filePath: file,
+        fileName: `${code}-${title.replace(/[^\w]+/g, "-").slice(0, 40)}.pdf`,
+        fileMime: "application/pdf",
+        fileSize: bytes.length,
+      },
+    });
+  }
+
+  // Demo accounts have already accepted the privacy notice (PRD §7).
+  await db.user.updateMany({ data: { consentAt: new Date(), consentVersion: PRIVACY_VERSION } });
 
   await db.auditLog.create({
     data: { actorId: admin.id, action: "SEED", details: JSON.stringify({ note: "Demo data loaded" }) },

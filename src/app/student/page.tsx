@@ -5,8 +5,11 @@ import { db } from "@/lib/db";
 import { formatLongDate } from "@/lib/config";
 import { formatTime, minutesOfDay, toDateKey } from "@/lib/dates";
 import { sectionDay } from "@/lib/timetable";
-import { Badge, Card, ComingSoon, EmptyState, PageHeader } from "@/components/ui";
+import { getSettings } from "@/lib/settings";
+import { attendanceFor, classesNeeded, riskLevel } from "@/lib/attendance";
+import { Badge, Card, EmptyState, PageHeader } from "@/components/ui";
 import { DayList } from "@/components/timetable-views";
+import { DashboardNotices } from "@/components/notices-ui";
 
 export const metadata: Metadata = { title: "Student dashboard" };
 
@@ -48,6 +51,9 @@ export default async function StudentDashboardPage() {
   ]);
   const open = todaysSessions.find((s) => s.status === "OPEN");
   const pendingRequests = pendingLeave + pendingReg;
+  const [settings, ay] = await Promise.all([getSettings(), db.academicYear.findFirst({ where: { isCurrent: true } })]);
+  const attendance = (await attendanceFor([student.id], { from: ay?.startDate.toISOString().slice(0, 10), to: today })).get(student.id)!.overall;
+  const risk = riskLevel(attendance.percent, settings);
 
   const profile: [string, React.ReactNode][] = [
     ["Roll number", <span key="r" className="font-mono">{student.rollNo}</span>],
@@ -137,9 +143,39 @@ export default async function StudentDashboardPage() {
         {plan.reason ? <EmptyState>{plan.reason}</EmptyState> : <DayList periods={plan.periods} nowMinutes={minutesOfDay(now)} />}
       </Card>
 
-      <div className="mt-6 grid gap-4 md:grid-cols-2">
-        <ComingSoon day={6}>Attendance: overall, subject-wise and monthly calendar.</ComingSoon>
-        <ComingSoon day={7}>Internal and semester results, PDF report card.</ComingSoon>
+      <div className="mt-6 grid gap-6 lg:grid-cols-2">
+        <Card
+          title="Attendance this year"
+          action={
+            <Link href="/student/attendance" className="text-xs font-medium text-brand-700 hover:underline">
+              Details
+            </Link>
+          }
+        >
+          <p className="text-3xl font-semibold tabular-nums text-slate-900">{attendance.percent === null ? "–" : `${attendance.percent}%`}</p>
+          <p className="mt-1 text-sm text-slate-600">
+            {attendance.attended} of {attendance.held} classes · required {settings.warningThreshold}%
+          </p>
+          <div className="mt-2">
+            {risk === "CRITICAL" ? (
+              <Badge tone="red">Critical: below {settings.criticalThreshold}%</Badge>
+            ) : risk === "WARNING" ? (
+              <Badge tone="amber">Below {settings.warningThreshold}%. Attend the next {classesNeeded(attendance, settings.warningThreshold)} classes.</Badge>
+            ) : risk === "OK" ? (
+              <Badge tone="green">On track</Badge>
+            ) : (
+              <Badge>No classes recorded yet</Badge>
+            )}
+          </div>
+          <p className="mt-4 text-sm">
+            <Link href="/student/results" className="font-medium text-brand-700 hover:underline">
+              View published results
+            </Link>
+          </p>
+        </Card>
+        <div>
+          <DashboardNotices user={user} />
+        </div>
       </div>
     </>
   );

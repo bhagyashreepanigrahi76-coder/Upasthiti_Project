@@ -3,7 +3,7 @@ import Link from "next/link";
 import { departmentsFor, requirePortal } from "@/lib/auth";
 import { db } from "@/lib/db";
 import { formatLongDate } from "@/lib/config";
-import { Badge, Card, ComingSoon, EmptyState, PageHeader, StatCard } from "@/components/ui";
+import { Badge, Card, EmptyState, PageHeader, StatCard } from "@/components/ui";
 
 export const metadata: Metadata = { title: "HOD dashboard" };
 
@@ -31,6 +31,10 @@ export default async function HodDashboardPage() {
     where: { departmentId: { in: departmentIds }, status: "ACTIVE" },
     _count: true,
   });
+  const [marksToVerify, editsPending] = await Promise.all([
+    db.assessment.count({ where: { status: "SUBMITTED", section: { departmentId: { in: departmentIds } } } }),
+    db.attendanceEditRequest.count({ where: { status: "PENDING", session: { section: { departmentId: { in: departmentIds } } } } }),
+  ]);
 
   return (
     <>
@@ -103,7 +107,22 @@ export default async function HodDashboardPage() {
             </Link>
           </p>
         </Card>
-        <ComingSoon day={7}>Verify submitted marks before they are locked and published.</ComingSoon>
+        <Card title="Waiting for you">
+          <ul className="space-y-1 text-sm">
+            <li>
+              <Link href="/hod/marks" className="font-medium text-brand-700 hover:underline">
+                Marks to verify
+              </Link>
+              : {marksToVerify}
+            </li>
+            <li>
+              <Link href="/hod/attendance-edits" className="font-medium text-brand-700 hover:underline">
+                Attendance edit requests
+              </Link>
+              : {editsPending}
+            </li>
+          </ul>
+        </Card>
       </div>
     </>
   );

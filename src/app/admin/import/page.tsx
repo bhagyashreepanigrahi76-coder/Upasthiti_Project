@@ -95,7 +95,7 @@ export default async function ImportPage({ searchParams }: Props) {
       ) : (
         <div className="grid gap-6 lg:grid-cols-2">
           <Card title="1. Upload a file">
-            <ActionForm action={previewImport} submitLabel="Check file" pendingLabel="Checking…" encType="multipart/form-data">
+            <ActionForm action={previewImport} submitLabel="Check file" pendingLabel="Checking…">
               <Field label="What are you importing?" name="kind">
                 <Select
                   name="kind"

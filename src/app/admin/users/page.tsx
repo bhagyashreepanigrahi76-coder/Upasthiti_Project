@@ -7,6 +7,7 @@ import { ROLE_LABELS, ROLES, isRole } from "@/lib/roles";
 import { formatDateTime } from "@/lib/config";
 import { Badge, Card, EmptyState, PageHeader, Table, td } from "@/components/ui";
 import { inputClass } from "@/components/form-fields";
+import { textContains } from "@/lib/db-search";
 
 export const metadata: Metadata = { title: "Users" };
 
@@ -25,7 +26,7 @@ export default async function UsersPage({ searchParams }: Props) {
   const filters: Prisma.UserWhereInput[] = [];
   if (q) {
     filters.push({
-      OR: [{ name: { contains: q } }, { collegeId: { contains: q.toUpperCase() } }, { email: { contains: q.toLowerCase() } }],
+      OR: [{ name: textContains(q) }, { collegeId: textContains(q.toUpperCase()) }, { email: textContains(q.toLowerCase()) }],
     });
   }
   if (role) filters.push({ roles: { some: { role } } });

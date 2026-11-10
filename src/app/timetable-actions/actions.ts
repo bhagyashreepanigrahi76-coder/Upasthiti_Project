@@ -55,6 +55,21 @@ async function saveVersion(user: CurrentUser, sectionId: string, effectiveFrom: 
     body: `A section you teach has a new timetable from ${formatDateKey(effectiveFrom)}.`,
     link: "/teacher/timetable",
   });
+  // FR-65: the latest timetable also appears on the notice board for the section.
+  const sectionInfo = await db.section.findUnique({ where: { id: sectionId }, include: { department: true } });
+  await db.notice.create({
+    data: {
+      title: `Timetable for ${sectionInfo?.department.code} Year ${sectionInfo?.year}-${sectionInfo?.name} from ${formatDateKey(effectiveFrom)}`,
+      body: `A ${existing ? "corrected" : "new"} timetable is in force from ${formatDateKey(effectiveFrom)}.${note ? `\n\n${note}` : ""}\n\nOpen Timetable in the app to see the weekly grid, or print it from there.`,
+      category: "TIMETABLE",
+      audience: "STUDENTS",
+      departmentId: sectionInfo?.departmentId,
+      year: sectionInfo?.year,
+      sectionId,
+      createdById: user.id,
+      notifiedAt: new Date(), // students were already notified above
+    },
+  });
   await logAudit({
     actorId: user.id,
     action: existing ? "TIMETABLE_UPDATED" : "TIMETABLE_VERSION_CREATED",

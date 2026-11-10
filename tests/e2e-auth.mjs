@@ -42,16 +42,16 @@ const get = (path, cookie) =>
   }));
 
 // 1. Wrong password
-const bad = await login("S26CS001", "wrong-password");
+const bad = await login("S26BCA001", "wrong-password");
 check(bad.status === 200 && bad.body.includes("Invalid college ID or password"), "wrong password shows generic error");
 const unknown = await login("NOPE999", "whatever");
 check(unknown.body.includes("Invalid college ID or password"), "unknown ID shows the same generic error");
 
 // 2. Student login, lower-case ID accepted
-const stu = await login("s26cs001", "Demo@1234");
+const stu = await login("s26bca001", "Demo@1234");
 check(stu.status === 303 && stu.location?.endsWith("/student") && stu.cookie, "student logs in → /student", `${stu.status} ${stu.location}`);
 const stuPage = await get("/student", stu.cookie);
-check(stuPage.status === 200 && stuPage.body.includes("S26CS001") && stuPage.body.includes("Programming in C"), "student dashboard shows own roll no and subjects");
+check(stuPage.status === 200 && stuPage.body.includes("S26BCA001") && stuPage.body.includes("Programming in C"), "student dashboard shows own roll no and subjects");
 check(stuPage.body.includes("Rahul Verma"), "student sees class coordinator name");
 const stuAdmin = await get("/admin", stu.cookie);
 check(stuAdmin.status === 307 && stuAdmin.location?.endsWith("/forbidden"), "student blocked from /admin", `${stuAdmin.status} ${stuAdmin.location}`);
@@ -71,7 +71,7 @@ check(hod.location?.endsWith("/select-role"), "Teacher+HOD lands on portal picke
 const pick = await get("/select-role", hod.cookie);
 check(pick.body.includes("HOD portal") && pick.body.includes("Teacher portal") && !pick.body.includes("Admin portal"), "picker lists HOD and Teacher only");
 const hodPage = await get("/hod", hod.cookie);
-check(hodPage.status === 200 && hodPage.body.includes("B.Sc. Computer Science") && !hodPage.body.includes("B.Com."), "HOD sees only own department");
+check(hodPage.status === 200 && hodPage.body.includes("Bachelor of Computer Applications") && !hodPage.body.includes("Bachelor of Business Administration"), "HOD sees only own department");
 const hodTeach = await get("/teacher", hod.cookie);
 check(hodTeach.status === 200 && hodTeach.body.includes("Data Structures"), "HOD can open teacher portal with own classes");
 check((await get("/admin", hod.cookie)).location?.endsWith("/forbidden"), "HOD blocked from /admin");
@@ -83,16 +83,16 @@ check(menPage.body.includes("My mentees") && menPage.body.includes("Aarav Sharma
 check(!menPage.body.includes("Operating Systems"), "teacher does not see unassigned subjects");
 
 // 6. Parent with two children
-const par = await login("P26CS001", "Demo@1234");
+const par = await login("P26BCA001", "Demo@1234");
 const parPage = await get("/parent", par.cookie);
-check(par.location?.endsWith("/parent") && parPage.body.includes("S26CS001") && parPage.body.includes("S24CS001"), "parent sees both linked children");
+check(par.location?.endsWith("/parent") && parPage.body.includes("S26BCA001") && parPage.body.includes("S24BCA001"), "parent sees both linked children");
 
 // 7. ?next handling
 const nextOk = await login("T1001", "Demo@1234", "/hod");
 check(nextOk.location?.endsWith("/hod"), "valid ?next=/hod honoured");
-const nextEvil = await login("S26CS002", "Demo@1234", "//evil.example.com");
+const nextEvil = await login("S26BCA002", "Demo@1234", "//evil.example.com");
 check(nextEvil.location?.endsWith("/student"), "open redirect //evil.example.com ignored", nextEvil.location);
-const nextForbidden = await login("S26CS002", "Demo@1234", "/admin");
+const nextForbidden = await login("S26BCA002", "Demo@1234", "/admin");
 check(nextForbidden.location?.endsWith("/student"), "?next to a forbidden portal ignored", nextForbidden.location);
 
 // 8. Tampered cookie

@@ -1,15 +1,22 @@
 "use server";
 
+import { headers } from "next/headers";
 import { redirect } from "next/navigation";
 import { z } from "zod";
 import { db } from "@/lib/db";
 import { verifyPassword } from "@/lib/password";
-import { createSession, deleteSession, readSession } from "@/lib/session";
+import { createSession, deleteSession, readSession, setPending2fa } from "@/lib/session";
 import { logAudit } from "@/lib/audit";
 import { homePathForRoles, safeNextPath } from "@/lib/roles";
+import { issueOtp } from "@/lib/otp";
+import { clientIpFrom, hit, peek } from "@/lib/rate-limit";
 
-const MAX_FAILED_ATTEMPTS = 5;
+const MAX_FAILED_ATTEMPTS = 5; // per account, then a 15-minute lock
 const LOCK_MINUTES = 15;
+// Per network, only failed attempts count: a whole campus often shares one
+// public IP, so successful sign-ins must never be limited by IP.
+const IP_FAILURES = 50;
+const IP_WINDOW_MS = 15 * 60_000;
 
 const loginSchema = z.object({
   collegeId: z
@@ -47,16 +54,27 @@ export async function login(_prev: LoginState, formData: FormData): Promise<Logi
   }
   const { collegeId, password, next } = parsed.data;
 
+  const ipKey = `login-fail:${clientIpFrom(await headers())}`;
+  const ipCheck = peek(ipKey, IP_FAILURES, IP_WINDOW_MS);
+  if (!ipCheck.ok) {
+    return { error: `Too many failed sign-ins from this network. Try again in ${Math.ceil(ipCheck.retryAfterSec / 60)} minutes.`, collegeId };
+  }
+
   const user = await db.user.findUnique({
     where: { collegeId },
     select: {
       id: true,
+      name: true,
+      email: true,
+      phone: true,
       passwordHash: true,
       isActive: true,
       failedLoginCount: true,
       lockedUntil: true,
       mustChangePassword: true,
       sessionVersion: true,
+      twoFactorEnabled: true,
+      consentAt: true,
       roles: { select: { role: true } },
     },
   });
@@ -74,6 +92,7 @@ export async function login(_prev: LoginState, formData: FormData): Promise<Logi
   const passwordOk = await verifyPassword(password, user?.passwordHash);
 
   if (!user || !passwordOk) {
+    hit(ipKey, IP_FAILURES, IP_WINDOW_MS);
     if (user) {
       const attempts = user.failedLoginCount + 1;
       const lock = attempts >= MAX_FAILED_ATTEMPTS;
@@ -107,11 +126,24 @@ export async function login(_prev: LoginState, formData: FormData): Promise<Logi
     where: { id: user.id },
     data: { failedLoginCount: 0, lockedUntil: null, lastLoginAt: now },
   });
+
+  // FR-3: staff who turned on two-step sign-in get a code before a session exists.
+  if (user.twoFactorEnabled && !user.mustChangePassword) {
+    const sent = await issueOtp(user, "TWO_FACTOR");
+    if (!sent.ok) return { error: sent.error, collegeId };
+    await setPending2fa(user.id);
+    await logAudit({ actorId: user.id, action: "LOGIN_2FA_CODE_SENT" });
+    const target = safeNextPath(next, roles);
+    redirect(`/account/verify${target ? `?next=${encodeURIComponent(target)}` : ""}`);
+  }
+
   await createSession(user.id, roles, user.sessionVersion);
   await logAudit({ actorId: user.id, action: "LOGIN_SUCCESS" });
 
   // FR-1: the first sign-in with an issued password also needs an OTP.
   if (user.mustChangePassword) redirect("/account/setup");
+  // PRD §7: explicit consent before any data (including location) is collected.
+  if (!user.consentAt) redirect("/account/consent");
   redirect(safeNextPath(next, roles) ?? homePathForRoles(roles));
 }
 

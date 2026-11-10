@@ -5,12 +5,12 @@ import { APP_NAME } from "@/lib/config";
 export default function manifest(): MetadataRoute.Manifest {
   return {
     name: APP_NAME,
-    short_name: "Attendance",
-    description: "Punch in/out, attendance, timetable and results.",
+    short_name: APP_NAME,
+    description: "Upasthiti: attendance, timetable, results, library and notes for BCA & BBA.",
     start_url: "/login",
     display: "standalone",
-    background_color: "#f6f7f9",
-    theme_color: "#2f5bd8",
+    background_color: "#fbf7f0",
+    theme_color: "#7a1f2b",
     icons: [{ src: "/icon.svg", sizes: "any", type: "image/svg+xml", purpose: "any" }],
   };
 }

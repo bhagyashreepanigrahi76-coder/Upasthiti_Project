@@ -62,7 +62,6 @@ export function ActionForm({
   resetOnSuccess = false,
   className = "space-y-4",
   confirmText,
-  encType,
 }: {
   action: Action;
   children?: React.ReactNode;
@@ -72,8 +71,8 @@ export function ActionForm({
   resetOnSuccess?: boolean;
   className?: string;
   confirmText?: string;
-  encType?: "multipart/form-data";
 }) {
+  // File inputs work without encType: React sends multipart data for function actions.
   const [state, formAction] = useActionState(action, undefined);
   const ref = useRef<HTMLFormElement>(null);
 
@@ -83,7 +82,7 @@ export function ActionForm({
 
   return (
     <FormStateContext value={state}>
-      <form ref={ref} action={formAction} className={className} encType={encType} noValidate>
+      <form ref={ref} action={formAction} className={className} noValidate>
         <FormBanner state={state} />
         {children}
         {submitLabel !== null && (

@@ -57,11 +57,13 @@ export async function savePunchSettings(_prev: ActionState, formData: FormData):
     enforceSchedule: formData.get("enforceSchedule") === "on",
     requireDeviceBinding: formData.get("requireDeviceBinding") === "on",
     allowMultipleSessions: formData.get("allowMultipleSessions") === "on",
+    requireCampusPunch: formData.get("requireCampusPunch") === "on",
   };
   const parsed = settingsSchema
     .pick({
       collegeStart: true, collegeEnd: true, punchCutoff: true, earlyArrivalMinutes: true, workingDays: true,
       enforceSchedule: true, requireDeviceBinding: true, allowMultipleSessions: true,
+      requireCampusPunch: true, attendanceEditHours: true,
       maxAccuracyMeters: true, toleranceMeters: true, maxClockSkewMinutes: true, offlineSyncLimitHours: true, maxSpeedKmh: true,
       warningThreshold: true, criticalThreshold: true, leavePolicy: true,
     })

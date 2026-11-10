@@ -1,7 +1,11 @@
 import type { Metadata } from "next";
+import Link from "next/link";
 import { requirePortal } from "@/lib/auth";
 import { db } from "@/lib/db";
+import { toDateKey } from "@/lib/dates";
+import { attendanceFor } from "@/lib/attendance";
 import { Card, ComingSoon, EmptyState, PageHeader } from "@/components/ui";
+import { DashboardNotices } from "@/components/notices-ui";
 
 export const metadata: Metadata = { title: "Parent dashboard" };
 
@@ -28,6 +32,11 @@ export default async function ParentDashboardPage() {
   });
 
   const children = parent?.students.map((link) => ({ ...link.student, relationship: link.relationship })) ?? [];
+  const ay = await db.academicYear.findFirst({ where: { isCurrent: true } });
+  const attendance = await attendanceFor(
+    children.map((c) => c.id),
+    { from: ay?.startDate.toISOString().slice(0, 10), to: toDateKey(new Date()) },
+  );
 
   return (
     <>
@@ -63,15 +72,30 @@ export default async function ParentDashboardPage() {
                     {s.mentor ? `${s.mentor.user.name}${s.mentor.user.email ? ` · ${s.mentor.user.email}` : ""}` : "Not assigned"}
                   </dd>
                 </div>
+                <div className="col-span-2">
+                  <dt className="text-xs uppercase tracking-wide text-slate-500">Attendance this year</dt>
+                  <dd className="text-slate-900">
+                    {attendance.get(s.id)?.overall.percent ?? "–"}
+                    {attendance.get(s.id)?.overall.percent != null && "%"}{" "}
+                    <Link href={`/parent/attendance?child=${s.id}`} className="ml-2 text-xs font-medium text-brand-700 hover:underline">
+                      Attendance
+                    </Link>
+                    <Link href={`/parent/results?child=${s.id}`} className="ml-3 text-xs font-medium text-brand-700 hover:underline">
+                      Results
+                    </Link>
+                  </dd>
+                </div>
               </dl>
             </Card>
           ))}
         </div>
       )}
 
-      <div className="mt-6 grid gap-4 md:grid-cols-2">
-        <ComingSoon day={9}>Monthly attendance summary and low-attendance alerts.</ComingSoon>
-        <ComingSoon day={9}>Published internal and semester results.</ComingSoon>
+      <div className="mt-6 grid gap-6 lg:grid-cols-2">
+        <div>
+          <DashboardNotices user={user} />
+        </div>
+        <ComingSoon day={9}>Monthly attendance email and low-attendance alerts.</ComingSoon>
       </div>
     </>
   );

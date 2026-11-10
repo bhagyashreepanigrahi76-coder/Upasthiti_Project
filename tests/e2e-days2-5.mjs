@@ -109,12 +109,12 @@ function xlsx(rows) {
   });
 }
 
-const cs = await db.department.findUnique({ where: { code: "CS" } });
+const cs = await db.department.findUnique({ where: { code: "BCA" } });
 const sections = await db.section.findMany({ include: { department: true } });
 const sec = (code, year, name) => sections.find((s) => s.department.code === code && s.year === year && s.name === name);
-const cs1A = sec("CS", 1, "A");
-const cs1B = sec("CS", 1, "B");
-const cs2A = sec("CS", 2, "A");
+const cs1A = sec("BCA", 1, "A");
+const cs1B = sec("BCA", 1, "B");
+const cs2A = sec("BCA", 2, "A");
 const teacherId = async (collegeId) => (await db.teacher.findFirst({ where: { user: { collegeId } } })).id;
 const subjectId = async (code) => (await db.subject.findUnique({ where: { code } })).id;
 
@@ -133,22 +133,22 @@ r = await act("/admin/academic/subjects", admin.cookie, "Add subject", { code: "
 check(r.body.includes("Year 1 has semesters 1-2"), "subject semester must match its year");
 r = await act("/admin/academic/subjects", admin.cookie, "Add subject", { code: "ma101", name: "Calculus", departmentId: math.id, year: "1", semester: "1", credits: "4", type: "THEORY" });
 check(r.body.includes("Subject MA101 added"), "admin adds a subject");
-r = await act(`/admin/academic/mapping?dept=${cs.id}`, admin.cookie, ">Assign<", { sectionId: cs1A.id, subjectId: await subjectId("CS201"), teacherId: await teacherId("T1003") });
+r = await act(`/admin/academic/mapping?dept=${cs.id}`, admin.cookie, ">Assign<", { sectionId: cs1A.id, subjectId: await subjectId("BCA201"), teacherId: await teacherId("T1003") });
 check(r.body.includes("different department or year"), "mapping a Year 2 subject to a Year 1 section is refused");
 r = await act("/admin/academic/sections", admin.cookie, (f) => f.includes(cs1B.id) && f.includes("Split"), { count: "2" });
 check(r.body.includes("students split into 2 batches"), "admin splits a section into lab batches");
-check((await db.batch.count({ where: { sectionId: cs1B.id } })) === 2, "two batches exist for CS 1-B");
+check((await db.batch.count({ where: { sectionId: cs1B.id } })) === 2, "two batches exist for BCA 1-B");
 
 // =============================================================================
 heading("Day 2 · Users, first login with OTP");
 r = await act("/admin/users/new", admin.cookie, 'name="kind"', {
-  kind: "STUDENT", collegeId: "s26cs900", name: "Test Student", email: "test.student@example.com",
+  kind: "STUDENT", collegeId: "s26bca900", name: "Test Student", email: "test.student@example.com",
   sectionId: cs1A.id, admissionYear: "2026", parentName: "Test Parent", parentEmail: "test.parent@example.com", relationship: "Guardian",
 });
 // Action results travel in React's payload and render on hydration, so read them from there.
 const temp = r.body.match(/"secret":"([A-Za-z]+-\d{4}-[A-Za-z]+)"/)?.[1];
 check(Boolean(temp), "admin creates a student and sees a one-time temporary password", r.body.match(/role="alert"[\s\S]{0,300}/)?.[0]);
-let s900 = await login("S26CS900", temp);
+let s900 = await login("S26BCA900", temp);
 check(s900.status === 303 && s900.location?.endsWith("/account/setup"), "first login with temporary password goes to account setup", s900.location);
 r = await get("/student", s900.cookie);
 check(r.body.includes("/account/setup"), "portal pages redirect to setup until it is finished");
@@ -162,41 +162,43 @@ r = await act("/account/setup", s900.cookie, "Save and continue", { code: code90
 check(r.body.includes("at least 8 characters"), "weak password is rejected");
 r = await act("/account/setup", s900.cookie, "Save and continue", { code: code900, password: "NewPass123", confirmPassword: "NewPass123" });
 const newCookie = cookieOf(r);
-check(r.status === 303 && r.location?.endsWith("/student") && newCookie, "correct code + strong password completes setup", `${r.status} ${r.location}`);
+check(r.status === 303 && r.location?.endsWith("/account/consent") && newCookie, "correct code + strong password completes setup, then the privacy notice", `${r.status} ${r.location}`);
+r = await act("/account/consent", newCookie, 'name="agree"', { agree: "on" });
+check(r.status === 303 && r.location?.endsWith("/student"), "accepting the privacy notice opens the portal (Day 10)", `${r.status} ${r.location}`);
 check((await get("/student", s900.cookie)).body.includes("/auth/reset"), "the old session is signed out after the password change");
-check((await get("/student", newCookie)).body.includes("S26CS900"), "the renewed session opens the student portal");
-check((await login("S26CS900", "NewPass123")).location?.endsWith("/student"), "student signs in with the new password");
+check((await get("/student", newCookie)).body.includes("S26BCA900"), "the renewed session opens the student portal");
+check((await login("S26BCA900", "NewPass123")).location?.endsWith("/student"), "student signs in with the new password");
 
 heading("Day 2 · Bulk import (CSV and Excel) and account activation");
 const csv =
   "name,college_id,year,department,section,parent_name,parent_email,parent_phone,email\n" +
-  "Import One,S26CS901,1,CS,A,Parent One,p1@example.com,,import.one@example.com\n" +
-  '"Two, Import",S26CS902,1,CS,B,Parent Two,p2@example.com,,\n' +
-  "Bad Row,S26CS001,1,CS,Z,,not-an-email,,\n";
+  "Import One,S26BCA901,1,BCA,A,Parent One,p1@example.com,,import.one@example.com\n" +
+  '"Two, Import",S26BCA902,1,BCA,B,Parent Two,p2@example.com,,\n' +
+  "Bad Row,S26BCA001,1,BCA,Z,,not-an-email,,\n";
 r = await act("/admin/import", admin.cookie, 'name="file"', { kind: "STUDENTS" }, { file: { data: csv, type: "text/csv", name: "students.csv" } });
 check(r.status === 303 && r.location?.includes("/admin/import?job="), "CSV upload produces a preview", r.status);
 const jobPath = r.location?.replace(BASE, "") ?? "/admin/import";
 r = await get(jobPath, admin.cookie);
-check(r.body.includes("2 ready") && r.body.includes("already exists") && r.body.includes("not found in CS") && r.body.includes("Parent email is not valid"), "preview shows valid rows and per-row errors");
-check((await db.user.count({ where: { collegeId: { in: ["S26CS901", "S26CS902"] } } })) === 0, "nothing is saved before confirming");
+check(r.body.includes("2 ready") && r.body.includes("already exists") && r.body.includes("not found in BCA") && r.body.includes("Parent email is not valid"), "preview shows valid rows and per-row errors");
+check((await db.user.count({ where: { collegeId: { in: ["S26BCA901", "S26BCA902"] } } })) === 0, "nothing is saved before confirming");
 r = await act(jobPath, admin.cookie, "Import 2 valid rows", {});
 check(r.body.includes("Created 2 accounts"), "commit creates the valid rows", r.body.match(/role="(alert|status)"[\s\S]{0,200}/)?.[0]);
-check((await db.user.findUnique({ where: { collegeId: "S26CS902" } }))?.name === "Two, Import", "quoted CSV field with a comma is read correctly");
-check((await login("S26CS901", "anything123")).body.includes("Invalid college ID or password"), "imported account has no usable password yet");
+check((await db.user.findUnique({ where: { collegeId: "S26BCA902" } }))?.name === "Two, Import", "quoted CSV field with a comma is read correctly");
+check((await login("S26BCA901", "anything123")).body.includes("Invalid college ID or password"), "imported account has no usable password yet");
 const before901 = outboxCount("import.one@example.com");
-r = await act("/account/recover", null, "Send code", { collegeId: "s26cs901" });
+r = await act("/account/recover", null, "Send code", { collegeId: "s26bca901" });
 check(r.body.includes("If that college ID is registered"), "activation request gives a neutral answer");
 check(outboxCount("import.one@example.com") === before901 + 1, "activation code was sent to the student's email");
 r = await act("/account/recover", null, "Send code", { collegeId: "NOSUCH999" });
 check(r.body.includes("If that college ID is registered"), "unknown IDs get the same neutral answer");
-r = await act("/account/recover", null, "Set password", { collegeId: "S26CS901", code: latestCode("import.one@example.com"), password: "Imported123", confirmPassword: "Imported123" });
+r = await act("/account/recover", null, "Set password", { collegeId: "S26BCA901", code: latestCode("import.one@example.com"), password: "Imported123", confirmPassword: "Imported123" });
 check(r.status === 303 && r.location?.includes("/login?notice=password-set"), "code + new password activates the account", `${r.status} ${r.location}`);
-check((await login("S26CS901", "Imported123")).location?.endsWith("/student"), "activated student can sign in");
+check((await login("S26BCA901", "Imported123")).location?.endsWith("/account/consent"), "activated student can sign in (and is asked for privacy consent first)");
 
 const book = xlsx([
   ["name", "college_id", "department", "email", "designation", "roles", "mentor_section"],
-  ["Priya Raman", "T1050", "CS", "priya.raman@example.edu", "Assistant Professor", "TEACHER;MENTOR", "1-B"],
-  ["No Email", "T1051", "CS", "", "", "TEACHER", ""],
+  ["Priya Raman", "T1050", "BCA", "priya.raman@example.edu", "Assistant Professor", "TEACHER;MENTOR", "1-B"],
+  ["No Email", "T1051", "BCA", "", "", "TEACHER", ""],
 ]);
 r = await act("/admin/import", admin.cookie, 'name="file"', { kind: "TEACHERS" }, { file: { data: book, type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", name: "teachers.xlsx" } });
 const xJob = r.location?.replace(BASE, "") ?? "";
@@ -208,16 +210,16 @@ check(priya?.roles.some((x) => x.role === "MENTOR" && x.sectionId === cs1B.id), 
 check((await db.student.count({ where: { sectionId: cs1B.id, mentorId: priya?.teacher?.id } })) > 0, "1-B students now have the new coordinator");
 
 heading("Day 2 · Account administration and server-side checks");
-const s004 = await login("S26CS004", "Demo@1234");
-const u004 = await db.user.findUnique({ where: { collegeId: "S26CS004" } });
+const s004 = await login("S26BCA004", "Demo@1234");
+const u004 = await db.user.findUnique({ where: { collegeId: "S26BCA004" } });
 r = await act(`/admin/users/${u004.id}`, admin.cookie, (f) => f.includes("Deactivate account"), {});
 check(r.body.includes("deactivated") || (await db.user.findUnique({ where: { id: u004.id } })).isActive === false, "admin deactivates an account");
 check((await get("/student", s004.cookie)).body.includes("/auth/reset"), "a deactivated user's open session stops working");
-check((await login("S26CS004", "Demo@1234")).body.includes("deactivated"), "a deactivated user cannot sign in");
+check((await login("S26BCA004", "Demo@1234")).body.includes("deactivated"), "a deactivated user cannot sign in");
 await act(`/admin/users/${u004.id}`, admin.cookie, (f) => f.includes("Activate account"), {});
 r = await act(`/admin/users/${u004.id}`, admin.cookie, (f) => f.includes("Reset password"), {});
 check(/"secret":"[A-Za-z]+-\d{4}-[A-Za-z]+"/.test(r.body), "admin password reset shows a one-time temporary password");
-const student = await login("S26CS005", "Demo@1234");
+const student = await login("S26BCA005", "Demo@1234");
 r = await act("/admin/users/new", admin.cookie, 'name="kind"', { kind: "ADMIN", collegeId: "HACKER1", name: "Hacker", email: "" }, {}, "/student", student.cookie);
 check((await db.user.count({ where: { collegeId: "HACKER1" } })) === 0, "a student calling the admin 'create user' action directly is refused on the server");
 
@@ -226,23 +228,23 @@ heading("Day 3 · Geofenced punch in / out");
 await setSetting("enforceSchedule", false); // tests run at any hour; the schedule is tested separately below
 r = await act("/admin/geofence", admin.cookie, "Add point", { name: "Far campus", latitude: "13.4", longitude: "77.6", radiusMeters: "200" });
 check(r.body.includes("Campus point added"), "admin adds a second campus point");
-const s002 = await login("S26CS002", "Demo@1234");
+const s002 = await login("S26BCA002", "Demo@1234");
 const devA = "device-s002-aaaaaaaa";
 let p = await punch(s002.cookie, { dryRun: true, deviceId: devA });
 check(p.json?.code === "READY" && p.json.inside === true, "dry run inside campus says ready, with distance", JSON.stringify(p.json));
-check((await db.punchRecord.count({ where: { student: { rollNo: "S26CS002" } } })) === 0, "dry runs are not stored");
+check((await db.punchRecord.count({ where: { student: { rollNo: "S26BCA002" } } })) === 0, "dry runs are not stored");
 p = await punch(s002.cookie, { deviceId: devA, accuracy: 80 });
 check(p.json?.code === "POOR_ACCURACY", "poor GPS accuracy is rejected (FR-8)");
 p = await punch(s002.cookie, { deviceId: devA, latitude: 12.9816 });
 check(p.json?.code === "OUTSIDE_GEOFENCE" && p.json.distanceMeters > 1000, "1.1 km away is rejected with the distance (FR-5)", JSON.stringify(p.json));
 p = await punch(s002.cookie, { deviceId: devA });
 check(p.json?.accepted === true && p.json.code === "OK", "punch in inside campus is accepted", JSON.stringify(p.json));
-check((await db.device.findFirst({ where: { user: { collegeId: "S26CS002" } } }))?.status === "APPROVED", "first phone is registered automatically (FR-4)");
+check((await db.device.findFirst({ where: { user: { collegeId: "S26BCA002" } } }))?.status === "APPROVED", "first phone is registered automatically (FR-4)");
 p = await punch(s002.cookie, { deviceId: devA });
 check(p.json?.code === "ALREADY_IN", "second punch-in is refused");
 p = await punch(s002.cookie, { type: "OUT", deviceId: "device-s002-bbbbbbbb" });
 check(p.json?.code === "DEVICE_NOT_REGISTERED", "punching from another phone is refused and requests approval");
-const devB = await db.device.findFirst({ where: { user: { collegeId: "S26CS002" }, status: "PENDING" } });
+const devB = await db.device.findFirst({ where: { user: { collegeId: "S26BCA002" }, status: "PENDING" } });
 check(Boolean(devB), "a pending device request is created");
 p = await punch(s002.cookie, { type: "OUT", deviceId: devA });
 check(p.json?.accepted && p.json.message.startsWith("Punched out"), "punch out from the registered phone works (FR-6)", p.json?.message);
@@ -250,33 +252,33 @@ p = await punch(s002.cookie, { deviceId: devA });
 check(p.json?.code === "ALREADY_DONE", "only one campus session per day by default");
 p = await punch(s002.cookie, { deviceId: devA, mocked: true });
 check(p.json?.code === "MOCK_LOCATION", "a reported fake-location app is rejected (FR-9)");
-check((await db.punchRecord.count({ where: { student: { rollNo: "S26CS002" }, status: "REJECTED" } })) >= 5, "rejected attempts are stored for the exceptions report");
+check((await db.punchRecord.count({ where: { student: { rollNo: "S26BCA002" }, status: "REJECTED" } })) >= 5, "rejected attempts are stored for the exceptions report");
 r = await act("/admin/devices", admin.cookie, (f) => f.includes(devB.id) && f.includes("Approve"), {});
-const devices = await db.device.findMany({ where: { user: { collegeId: "S26CS002" } } });
+const devices = await db.device.findMany({ where: { user: { collegeId: "S26BCA002" } } });
 check(devices.find((d) => d.id === devB.id)?.status === "APPROVED" && devices.find((d) => d.id !== devB.id)?.status === "REVOKED", "approving the new phone revokes the old one");
 p = await punch(s002.cookie, { dryRun: true, deviceId: devA });
 check(p.json?.code === "DEVICE_BLOCKED", "the revoked phone can no longer punch");
 
-const s005 = await login("S26CS005", "Demo@1234");
+const s005 = await login("S26BCA005", "Demo@1234");
 const offTime = Date.now() - 2 * 3600_000;
 p = await punch(s005.cookie, { deviceId: "device-s005-cccccccc", source: "OFFLINE", deviceTime: offTime });
 check(p.json?.accepted === true, "offline punch is accepted after sync (FR-12)", JSON.stringify(p.json));
-const off = await db.punchRecord.findFirst({ where: { student: { rollNo: "S26CS005" }, status: "ACCEPTED" } });
+const off = await db.punchRecord.findFirst({ where: { student: { rollNo: "S26BCA005" }, status: "ACCEPTED" } });
 check(off?.effectiveTime.getTime() === offTime && off.source === "OFFLINE", "offline punch keeps the time it was made");
 p = await punch(s005.cookie, { deviceId: "device-s005-cccccccc", source: "OFFLINE", deviceTime: offTime });
 check(p.json?.code === "DUPLICATE", "re-sending the same offline punch does not count twice");
 p = await punch(s005.cookie, { type: "OUT", deviceId: "device-s005-cccccccc", source: "OFFLINE", deviceTime: Date.now() + 3600_000 });
 check(p.json?.code === "FUTURE_TIME", "an offline punch dated in the future is rejected");
-const s006 = await login("S26CS006", "Demo@1234");
+const s006 = await login("S26BCA006", "Demo@1234");
 p = await punch(s006.cookie, { deviceId: "device-s006-dddddddd", source: "OFFLINE", deviceTime: Date.now() - 13 * 3600_000 });
-const late = await db.punchRecord.findFirst({ where: { student: { rollNo: "S26CS006" } } });
+const late = await db.punchRecord.findFirst({ where: { student: { rollNo: "S26BCA006" } } });
 check(p.json?.accepted && late?.flags?.includes("LATE_SYNC"), "a sync later than the limit is flagged for review");
-const s007 = await login("S26CS007", "Demo@1234");
+const s007 = await login("S26BCA007", "Demo@1234");
 p = await punch(s007.cookie, { deviceId: "device-s007-eeeeeeee", deviceTime: Date.now() - 30 * 60_000 });
-const skew = await db.punchRecord.findFirst({ where: { student: { rollNo: "S26CS007" }, type: "IN" } });
+const skew = await db.punchRecord.findFirst({ where: { student: { rollNo: "S26BCA007" }, type: "IN" } });
 check(p.json?.accepted && skew?.flags?.includes("CLOCK_SKEW"), "a phone clock 30 min off is flagged (FR-9)");
 p = await punch(s007.cookie, { type: "OUT", deviceId: "device-s007-eeeeeeee", latitude: 13.4, longitude: 77.6 });
-const jump = await db.punchRecord.findFirst({ where: { student: { rollNo: "S26CS007" }, type: "OUT" } });
+const jump = await db.punchRecord.findFirst({ where: { student: { rollNo: "S26BCA007" }, type: "OUT" } });
 check(p.json?.accepted && jump?.flags?.includes("IMPOSSIBLE_MOVEMENT"), "47 km in a minute is flagged as impossible movement", JSON.stringify(p.json));
 
 check((await punch(null, { deviceId: "x-device-000" })).status === 401, "punch without signing in is refused");
@@ -285,7 +287,7 @@ check((await punch(t1002.cookie, { deviceId: "x-device-000" })).status === 403, 
 check((await punch(s002.cookie, { deviceId: devA }, { origin: "https://evil.example" })).status === 403, "cross-site punch requests are refused");
 check((await punch(s002.cookie, { deviceId: "x", latitude: "abc" })).status === 400, "malformed punch data is refused");
 
-const s008 = await login("S26CS008", "Demo@1234");
+const s008 = await login("S26BCA008", "Demo@1234");
 await setSetting("enforceSchedule", true);
 await setSetting("workingDays", [1, 2, 3, 4, 5, 6, 7].filter((d) => d !== weekday(today)));
 p = await punch(s008.cookie, { dryRun: true, deviceId: "device-s008-ffffffff" });
@@ -319,20 +321,20 @@ check((await get("/student/timetable", s002.cookie)).body.includes("Holiday: Tes
 const calBad = "start_date,type,title\n2026-13-40,HOLIDAY,Bad date\n";
 r = await act("/admin/calendar", admin.cookie, 'name="file"', {}, { file: { data: calBad, type: "text/csv", name: "cal.csv" } });
 check(r.body.includes("Nothing imported"), "calendar import with an error imports nothing");
-const calOk = `start_date,end_date,type,title,department,year\n${addDays(today, 40)},,EVENT,Sports day,,\n${addDays(today, 41)},${addDays(today, 42)},EXAM,Lab exam,CS,1\n`;
+const calOk = `start_date,end_date,type,title,department,year\n${addDays(today, 40)},,EVENT,Sports day,,\n${addDays(today, 41)},${addDays(today, 42)},EXAM,Lab exam,BCA,1\n`;
 r = await act("/admin/calendar", admin.cookie, 'name="file"', {}, { file: { data: calOk, type: "text/csv", name: "cal.csv" } });
 check(r.body.includes("Imported 2 calendar entries"), "a valid calendar file imports all rows");
 
 heading("Day 4 · Regularisation (FR-11)");
-const s001 = await login("S26CS001", "Demo@1234");
-const incomplete = await db.campusSession.findFirst({ where: { student: { rollNo: "S26CS001" }, status: "INCOMPLETE" } });
+const s001 = await login("S26BCA001", "Demo@1234");
+const incomplete = await db.campusSession.findFirst({ where: { student: { rollNo: "S26BCA001" }, status: "INCOMPLETE" } });
 r = await act("/student/requests", s001.cookie, "Send request", { dateKey: tomorrow, requestedIn: "09:10", requestedOut: "16:00", reason: "FORGOT", details: "Testing future date" });
 check(r.body.includes("Cannot be in the future"), "regularisation for a future date is refused");
 r = await act("/student/requests", s001.cookie, "Send request", { dateKey: incomplete.dateKey, requestedIn: "09:10", requestedOut: "16:00", reason: "FORGOT", details: "Forgot to punch out at four" });
 check(r.body.includes("Regularisation request sent"), "student requests regularisation for an incomplete day");
 r = await act("/student/requests", s001.cookie, "Send request", { dateKey: incomplete.dateKey, requestedIn: "09:10", requestedOut: "16:00", reason: "FORGOT", details: "Second try" });
 check(r.body.includes("already have a pending request"), "duplicate pending requests are refused");
-const reg = await db.regularisationRequest.findFirst({ where: { student: { rollNo: "S26CS001" }, status: "PENDING" } });
+const reg = await db.regularisationRequest.findFirst({ where: { student: { rollNo: "S26BCA001" }, status: "PENDING" } });
 check((await get("/notifications", t1002.cookie)).body.includes("Regularisation request from Aarav Sharma"), "the class coordinator is notified");
 const t1003 = await login("T1003", "Demo@1234");
 check((await get("/teacher/approvals", t1003.cookie)).body.includes("don't have either role"), "a teacher who is neither coordinator nor HOD sees no requests");
@@ -356,11 +358,11 @@ r = await act("/student/requests", s001.cookie, "Send leave request", { fromDate
 check(r.body.includes("Leave request sent"), "leave with a PDF certificate is sent");
 r = await act("/student/requests", s001.cookie, "Send leave request", { fromDate: leaveDay, toDate: leaveDay, type: "PERSONAL", reason: "Overlapping request" });
 check(r.body.includes("already have a pending leave"), "overlapping leave is refused");
-const leave = await db.leaveRequest.findFirst({ where: { student: { rollNo: "S26CS001" } } });
+const leave = await db.leaveRequest.findFirst({ where: { student: { rollNo: "S26BCA001" } } });
 const doc = (c) => fetch(`${BASE}/api/leave/${leave.id}/document`, { headers: { cookie: c } });
 let d = await doc(s001.cookie);
 check(d.status === 200 && d.headers.get("content-type") === "application/pdf", "the student can open their own document");
-check((await doc((await login("S26CS003", "Demo@1234")).cookie)).status === 404, "another student cannot open it");
+check((await doc((await login("S26BCA003", "Demo@1234")).cookie)).status === 404, "another student cannot open it");
 check((await doc(t1002.cookie)).status === 200, "their class coordinator can open it");
 const t1001 = await login("T1001", "Demo@1234");
 check((await doc(t1001.cookie)).status === 200, "their HOD can open it");
@@ -369,14 +371,14 @@ check((await doc(t2001.cookie)).status === 404, "another department's HOD cannot
 r = await act("/hod/approvals", t1001.cookie, (f) => f.includes(leave.id), { decision: "APPROVED" });
 check((await db.leaveRequest.findUnique({ where: { id: leave.id } })).status === "APPROVED", "the HOD approves the leave");
 r = await act("/student/requests", s001.cookie, "Send leave request", { fromDate: addDays(today, 10), toDate: addDays(today, 10), type: "PERSONAL", reason: "Family function" });
-const pl = await db.leaveRequest.findFirst({ where: { student: { rollNo: "S26CS001" }, status: "PENDING" } });
+const pl = await db.leaveRequest.findFirst({ where: { student: { rollNo: "S26BCA001" }, status: "PENDING" } });
 r = await act("/student/requests", s001.cookie, (f) => f.includes(pl.id) && f.includes("Cancel"), {});
 check((await db.leaveRequest.findUnique({ where: { id: pl.id } })).status === "CANCELLED", "a student can cancel a pending request");
 
 heading("Day 4 · Missed punch-out job (FR-10)");
 const cron = fs.readFileSync(path.join(APP, ".env"), "utf8").match(/CRON_SECRET="([^"]+)"/)?.[1];
 check((await fetch(`${BASE}/api/jobs/close-sessions`, { method: "POST" })).status === 401, "the job endpoint refuses calls without the secret");
-await db.campusSession.create({ data: { studentId: (await db.student.findUnique({ where: { rollNo: "S26CS010" } })).id, dateKey: addDays(today, -2), inAt: new Date(Date.now() - 2 * 86400_000), status: "OPEN" } });
+await db.campusSession.create({ data: { studentId: (await db.student.findUnique({ where: { rollNo: "S26BCA010" } })).id, dateKey: addDays(today, -2), inAt: new Date(Date.now() - 2 * 86400_000), status: "OPEN" } });
 const job = await fetch(`${BASE}/api/jobs/close-sessions`, { method: "POST", headers: { authorization: `Bearer ${cron}` } });
 const jobJson = await job.json();
 check(job.status === 200 && jobJson.closed >= 1, "the job closes open sessions from earlier days", JSON.stringify(jobJson));
@@ -384,8 +386,8 @@ check(job.status === 200 && jobJson.closed >= 1, "the job closes open sessions f
 // =============================================================================
 heading("Day 5 · Timetable views and permissions");
 r = await get("/student/timetable", s001.cookie);
-check(r.body.includes("CS101") && r.body.includes("Batch 1") && !r.body.includes("Batch 2"), "student sees their section's grid with only their own lab batch");
-check((await get("/teacher/timetable", t1002.cookie)).body.includes("CS 1-A"), "teacher sees their timetable across sections");
+check(r.body.includes("BCA101") && r.body.includes("Batch 1") && !r.body.includes("Batch 2"), "student sees their section's grid with only their own lab batch");
+check((await get("/teacher/timetable", t1002.cookie)).body.includes("BCA 1-A"), "teacher sees their timetable across sections");
 check((await get(`/hod/timetable/${cs1A.id}`, t1001.cookie)).body.includes("Editing the version"), "CS HOD can edit a CS timetable");
 r = await get(`/hod/timetable/${cs1A.id}`, t2001.cookie);
 check(r.status === 404 || r.body.includes("could not be found"), "Commerce HOD cannot open a CS timetable (FR-66)");
@@ -397,16 +399,16 @@ heading("Day 5 · Clash detection and versioning (FR-58, FR-64)");
 const slot = (dayOfWeek, periodNumber, code, teacher, room, extra = {}) => ({
   dayOfWeek, periodNumber, span: 1, type: "LECTURE", subjectId: code, teacherId: teacher, roomId: room, batchId: null, ...extra,
 });
-const [cs101, cs102, cs201] = [await subjectId("CS101"), await subjectId("CS102"), await subjectId("CS201")];
+const [cs101, cs102, cs201] = [await subjectId("BCA101"), await subjectId("BCA102"), await subjectId("BCA201")];
 const [tid1002, tid1003, tid2002] = [await teacherId("T1002"), await teacherId("T1003"), await teacherId("T2002")];
 const cr103 = (await db.room.findUnique({ where: { name: "CR-103" } })).id;
 const cr101 = (await db.room.findUnique({ where: { name: "CR-101" } })).id;
 const save = (slots, effectiveFrom = today) =>
   act(`/admin/timetable/${cs1B.id}`, admin.cookie, "Save timetable", { slots: JSON.stringify(slots), effectiveFrom, note: "" });
 r = await save([slot(1, 1, cs101, tid1002, cr103)]);
-check(r.body.includes("already teaching CS 1-A"), "a teacher booked in two sections at once is blocked");
+check(r.body.includes("already teaching BCA 1-A"), "a teacher booked in two sections at once is blocked");
 r = await save([slot(1, 3, cs101, tid1002, cr101)]);
-check(r.body.includes("CR-101 is already used by CS 1-A"), "a double-booked room is blocked");
+check(r.body.includes("CR-101 is already used by BCA 1-A"), "a double-booked room is blocked");
 r = await save([slot(1, 4, cs101, tid1002, cr103), slot(1, 4, cs102, tid2002, null)]);
 check(r.body.includes("two classes at the same time"), "two classes for one section in one period is blocked");
 r = await save([slot(1, 3, cs201, tid1002, cr103)]);
@@ -416,7 +418,7 @@ check(r.body.includes("cannot start in the past"), "a new version cannot start i
 r = await save([slot(1, 3, cs101, tid1002, cr103), slot(4, 2, cs101, tid1002, cr103)]);
 check(r.body.includes("New timetable version saved"), "a clash-free timetable is saved", r.body.match(/role="alert"[\s\S]{0,400}/)?.[0]);
 check((await db.timetable.count({ where: { sectionId: cs1B.id, effectiveFrom: today } })) === 1, "the version is stored with today's date");
-check((await get("/notifications", (await login("S26CS009", "Demo@1234")).cookie)).body.includes("Timetable updated"), "1-B students are notified");
+check((await get("/notifications", (await login("S26BCA009", "Demo@1234")).cookie)).body.includes("Timetable updated"), "1-B students are notified");
 
 heading("Day 5 · Changes on the day (FR-63)");
 let monday = addDays(today, (8 - weekday(today)) % 7);

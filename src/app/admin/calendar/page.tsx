@@ -94,7 +94,7 @@ export default async function AdminCalendarPage({ searchParams }: Props) {
               Columns: <code>start_date, end_date, type, title, department, year, description</code>. Type is HOLIDAY, EXAM,
               WORKING_SATURDAY or EVENT. Dates as YYYY-MM-DD or DD/MM/YYYY. If any row has an error, nothing is imported.
             </p>
-            <ActionForm action={importEvents} submitLabel="Import" pendingLabel="Importing…" encType="multipart/form-data" className="flex flex-wrap items-end gap-3">
+            <ActionForm action={importEvents} submitLabel="Import" pendingLabel="Importing…" className="flex flex-wrap items-end gap-3">
               <input
                 name="file"
                 type="file"

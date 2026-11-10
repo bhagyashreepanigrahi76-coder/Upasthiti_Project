@@ -107,7 +107,7 @@ export default async function AcademicYearsPage({ searchParams }: Props) {
                 <Input name="name" defaultValue={editing?.name} placeholder="Mathematics" />
               </Field>
               <Field label="Programme" name="programme">
-                <Input name="programme" defaultValue={editing?.programme} placeholder="B.Sc. Mathematics" />
+                <Input name="programme" defaultValue={editing?.programme} placeholder="Bachelor of Computer Applications (BCA)" />
               </Field>
             </FieldGrid>
           </ActionForm>

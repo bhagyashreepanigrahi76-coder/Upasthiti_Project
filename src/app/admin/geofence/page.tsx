@@ -136,6 +136,17 @@ export default async function GeofencePage({ searchParams }: Props) {
                 <Input name="maxSpeedKmh" type="number" defaultValue={settings.maxSpeedKmh} />
               </Field>
             </FieldGrid>
+            <h3 className="pt-2 text-sm font-semibold text-slate-800">Class attendance</h3>
+            <div className="rounded-lg bg-slate-50 p-3">
+              <Checkbox
+                name="requireCampusPunch"
+                label="Count 'present' only if the student punched in on campus that day"
+                defaultChecked={settings.requireCampusPunch}
+              />
+            </div>
+            <Field label="Teachers can edit attendance for (hours)" name="attendanceEditHours" hint="After this, edits need the HOD's approval.">
+              <Input name="attendanceEditHours" type="number" min={1} max={168} defaultValue={settings.attendanceEditHours} />
+            </Field>
             <h3 className="pt-2 text-sm font-semibold text-slate-800">Attendance thresholds</h3>
             <FieldGrid cols={3}>
               <Field label="Warning below (%)" name="warningThreshold">

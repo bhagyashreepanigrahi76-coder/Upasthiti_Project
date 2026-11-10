@@ -1,5 +1,5 @@
 import "server-only";
-import { strFromU8, unzipSync } from "fflate";
+import { strFromU8, strToU8, unzipSync, zipSync } from "fflate";
 
 // Reads the first sheet of an uploaded CSV or Excel (.xlsx) file into rows of
 // { header: value } objects. Headers are normalised: "Parent Email" -> "parent_email".
@@ -162,4 +162,50 @@ export function parseFlexibleDate(value: string): string | null {
   const dt = new Date(Date.UTC(y, m - 1, d));
   if (dt.getUTCFullYear() !== y || dt.getUTCMonth() !== m - 1 || dt.getUTCDate() !== d) return null;
   return dt.toISOString().slice(0, 10);
+}
+
+// --- Minimal .xlsx writer (one sheet, bold header row) ------------------------
+
+const XML_HEAD = '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>';
+const xmlEsc = (s: string) =>
+  s
+    .replace(/[\u0000-\u0008\u000B\u000C\u000E-\u001F]/g, "")
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;");
+const colName = (i: number) => {
+  let s = "";
+  for (let n = i + 1; n > 0; n = Math.floor((n - 1) / 26)) s = String.fromCharCode(65 + ((n - 1) % 26)) + s;
+  return s;
+};
+
+/** Builds an Excel workbook. Text cells are stored as text (never formulas). */
+export function toXlsx(rows: (string | number | null | undefined)[][], sheetName = "Sheet1"): Uint8Array {
+  const name = xmlEsc(sheetName.replace(/[[\]:*?/\\]/g, " ").slice(0, 31) || "Sheet1");
+  const sheetRows = rows
+    .map((row, r) => {
+      const cells = row
+        .map((v, c) => {
+          const ref = `${colName(c)}${r + 1}`;
+          const style = r === 0 ? ' s="1"' : "";
+          if (v === null || v === undefined || v === "") return "";
+          if (typeof v === "number" && Number.isFinite(v)) return `<c r="${ref}"${style}><v>${v}</v></c>`;
+          return `<c r="${ref}"${style} t="inlineStr"><is><t xml:space="preserve">${xmlEsc(String(v))}</t></is></c>`;
+        })
+        .join("");
+      return `<row r="${r + 1}">${cells}</row>`;
+    })
+    .join("");
+  const ns = 'xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main"';
+  const rel = "http://schemas.openxmlformats.org/officeDocument/2006/relationships";
+  const files: Record<string, string> = {
+    "[Content_Types].xml": `${XML_HEAD}<Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types"><Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/><Default Extension="xml" ContentType="application/xml"/><Override PartName="/xl/workbook.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet.main+xml"/><Override PartName="/xl/worksheets/sheet1.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.worksheet+xml"/><Override PartName="/xl/styles.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.styles+xml"/></Types>`,
+    "_rels/.rels": `${XML_HEAD}<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="rId1" Type="${rel}/officeDocument" Target="xl/workbook.xml"/></Relationships>`,
+    "xl/workbook.xml": `${XML_HEAD}<workbook ${ns} xmlns:r="${rel}"><sheets><sheet name="${name}" sheetId="1" r:id="rId1"/></sheets></workbook>`,
+    "xl/_rels/workbook.xml.rels": `${XML_HEAD}<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="rId1" Type="${rel}/worksheet" Target="worksheets/sheet1.xml"/><Relationship Id="rId2" Type="${rel}/styles" Target="styles.xml"/></Relationships>`,
+    "xl/styles.xml": `${XML_HEAD}<styleSheet ${ns}><fonts count="2"><font><sz val="11"/><name val="Calibri"/></font><font><b/><sz val="11"/><name val="Calibri"/></font></fonts><fills count="2"><fill><patternFill patternType="none"/></fill><fill><patternFill patternType="gray125"/></fill></fills><borders count="1"><border><left/><right/><top/><bottom/><diagonal/></border></borders><cellStyleXfs count="1"><xf numFmtId="0" fontId="0" fillId="0" borderId="0"/></cellStyleXfs><cellXfs count="2"><xf numFmtId="0" fontId="0" fillId="0" borderId="0" xfId="0"/><xf numFmtId="0" fontId="1" fillId="0" borderId="0" xfId="0" applyFont="1"/></cellXfs></styleSheet>`,
+    "xl/worksheets/sheet1.xml": `${XML_HEAD}<worksheet ${ns}><sheetData>${sheetRows}</sheetData></worksheet>`,
+  };
+  return zipSync(Object.fromEntries(Object.entries(files).map(([k, v]) => [k, strToU8(v)])));
 }

@@ -28,6 +28,8 @@ export type CurrentUser = {
   email: string | null;
   phone: string | null;
   mustChangePassword: boolean;
+  twoFactorEnabled: boolean;
+  consentAt: Date | null;
   roles: RoleName[];
   scopes: RoleScope[];
 };
@@ -48,6 +50,8 @@ export const getCurrentUser = cache(async (): Promise<CurrentUser | null> => {
       isActive: true,
       mustChangePassword: true,
       sessionVersion: true,
+      twoFactorEnabled: true,
+      consentAt: true,
       roles: {
         select: { role: true, departmentId: true, year: true, sectionId: true, subjectId: true },
       },
@@ -63,6 +67,8 @@ export const getCurrentUser = cache(async (): Promise<CurrentUser | null> => {
     email: user.email,
     phone: user.phone,
     mustChangePassword: user.mustChangePassword,
+    twoFactorEnabled: user.twoFactorEnabled,
+    consentAt: user.consentAt,
     roles: [...new Set(user.roles.map((r) => r.role))],
     scopes: user.roles,
   };
@@ -72,10 +78,12 @@ export const getCurrentUser = cache(async (): Promise<CurrentUser | null> => {
  * Redirects to login when nobody (or a deactivated user) is signed in, and to
  * first-login setup while the user still has to verify and set a password.
  */
-export async function requireUser(opts: { allowPendingSetup?: boolean } = {}): Promise<CurrentUser> {
+export async function requireUser(opts: { allowPendingSetup?: boolean; allowWithoutConsent?: boolean } = {}): Promise<CurrentUser> {
   const user = await getCurrentUser();
   if (user) {
     if (user.mustChangePassword && !opts.allowPendingSetup) redirect("/account/setup");
+    // PRD §7 / DPDP: nothing else until the privacy notice is accepted.
+    if (!user.consentAt && !user.mustChangePassword && !opts.allowPendingSetup && !opts.allowWithoutConsent) redirect("/account/consent");
     return user;
   }
   // A cookie that no longer maps to an active user must be cleared, which a
@@ -108,7 +116,8 @@ export function departmentsFor(user: CurrentUser, role: RoleName): string[] {
 /** For route handlers: the user or null, without redirects. */
 export async function currentUserForApi(): Promise<CurrentUser | null> {
   const user = await getCurrentUser();
-  return user && !user.mustChangePassword ? user : null;
+  // No API use (e.g. location for punches) before setup and consent.
+  return user && !user.mustChangePassword && user.consentAt ? user : null;
 }
 
 /** The student profile of the signed-in student, or a redirect. */

@@ -39,7 +39,7 @@ export function NewUserForm({
 
       <FieldGrid>
         <Field label={kind === "STUDENT" ? "Roll number (college ID)" : "College ID"} name="collegeId">
-          <Input name="collegeId" placeholder={kind === "STUDENT" ? "S26CS050" : kind === "TEACHER" ? "T1010" : ""} />
+          <Input name="collegeId" placeholder={kind === "STUDENT" ? "S26BCA050" : kind === "TEACHER" ? "T1010" : ""} />
         </Field>
         <Field label="Full name" name="name">
           <Input name="name" />
@@ -116,7 +116,7 @@ export function NewUserForm({
 
       {kind === "PARENT" && (
         <FieldGrid>
-          <Field label="Children's roll numbers" name="studentRollNos" hint="Separate with commas, e.g. S26CS001, S24CS001">
+          <Field label="Children's roll numbers" name="studentRollNos" hint="Separate with commas, e.g. S26BCA001, S24BCA001">
             <Input name="studentRollNos" />
           </Field>
           <Field label="Relationship" name="relationship">

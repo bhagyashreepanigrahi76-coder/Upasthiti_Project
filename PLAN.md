@@ -50,9 +50,9 @@ Source: *PRD: College Attendance & Academic Report App v1.0*. FR numbers below r
 - Cancel, substitute and extra-class changes with notifications (FR-63)
 - Versioning by "effective from" date (FR-64); printable view with Save as PDF (FR-65)
 
-**Deferred from Days 2-5** (to pick up later): teacher swap requests (FR-67, optional in the PRD); importing the calendar from PDF (CSV/Excel work); a service worker so the punch page opens with no connection at all (queued punches already sync once the page is open); showing the timetable on the notice board (Day 8).
+**Deferred from Days 2-5** (to pick up later): teacher swap requests (FR-67, optional in the PRD); importing the calendar from PDF (CSV/Excel work); a service worker so the punch page opens with no connection at all (queued punches already sync once the page is open); showing the timetable on the notice board (done on Day 8).
 
-## Day 6: Class attendance and attendance engine
+## Day 6: Class attendance and attendance engine ✅
 - Teacher dashboard: today's periods and pending tasks (FR-19)
 - Open a period and the section/batch list loads; mark Present, Absent, Late (FR-61)
 - Optional rule: present only with an open campus punch that day (§4.3)
@@ -60,7 +60,7 @@ Source: *PRD: College Attendance & Academic Report App v1.0*. FR numbers below r
 - Attendance percentage engine following §6: holidays, exam days and cancelled periods excluded, leave counted per policy (FR-62, FR-63)
 - Student attendance view: overall, subject-wise, monthly calendar, shortage warning (FR-32)
 
-## Day 7: Marks, results and report cards
+## Day 7: Marks, results and report cards ✅
 - Assessments per subject (Internal 1, Internal 2, Assignment, Practical, Semester) with max marks and weightage (FR-21)
 - Grid entry and Excel upload with validation, "AB" absentee code (FR-22)
 - Workflow Draft → Submitted → Verified → Locked → Published, logged revisions (FR-23)
@@ -68,7 +68,7 @@ Source: *PRD: College Attendance & Academic Report App v1.0*. FR numbers below r
 - Student results: marks, grade, SGPA/CGPA, history, PDF report card (FR-33)
 - Class analytics: average, highest, lowest, pass %, at-risk list (FR-25)
 
-## Day 8: Announcements, notice board and notifications
+## Day 8: Announcements, notice board and notifications ✅
 - Notices with audience targeting, categories, Urgent and Pinned (FR-43, FR-44, FR-45)
 - Attachments with a size limit; scheduled publish and expiry to archive (FR-46, FR-47)
 - Public notice board page and "Latest announcements" strip on login and dashboards (FR-42)
@@ -76,7 +76,9 @@ Source: *PRD: College Attendance & Academic Report App v1.0*. FR numbers below r
 - Search and archive; read tracking for urgent notices; link to calendar entries (FR-51, FR-52, FR-53)
 - In-app notification centre: punch reminders, calendar changes, results, low attendance (FR-35, FR-48)
 
-## Day 9: Parent reports and admin dashboards
+**Done early (from Day 9):** read-only parent views of attendance and results. **Still to come on Day 9:** low-attendance notifications and emails go with the monthly parent reports; notice emails move onto a retrying queue.
+
+## Day 9: Parent reports and admin dashboards ✅
 - Monthly parent report job on a set day, email template with status colour (FR-36, FR-37)
 - Warning ladder: early warning below 75 %, critical alert below 30 %, copy to coordinator (FR-38, FR-41)
 - Email queue with retries; EmailLog with sent/bounced/failed; preview, pause, resend, manual trigger (FR-39)
@@ -84,13 +86,21 @@ Source: *PRD: College Attendance & Academic Report App v1.0*. FR numbers below r
 - Admin dashboards: day-wise attendance, defaulters, department/year comparison, punch exceptions (FR-29)
 - Audit log viewer with filters (FR-30); read-only parent portal
 
-## Day 10: Hardening, year-end tools and release
+## Day 10: Hardening, year-end tools and release ✅
 - Rate limiting, security headers, session expiry, optional 2FA for staff (FR-3, §7)
 - Privacy consent screen and location-only-at-punch policy (§7, DPDP Act 2023)
 - Year-end promotion and archive of passed-out students (FR-28)
 - Excel/PDF exports for accreditation and audits (feature 13)
 - Tests: attendance %, geofence distance, permissions; end-to-end smoke test
 - PostgreSQL migration, deployment guide (hosting, scheduled jobs, backups), final README
+
+**How Day 10 turned out:** two-step sign-in sends a code by email/SMS rather than using an authenticator app. PDF exports use the browser's Save as PDF. PostgreSQL was verified by generating its migration script, not by running against a live server (see DEPLOYMENT.md).
+
+## After the 10 days
+- Native wrapper (Capacitor) for fake-GPS / rooted-phone detection (FR-9)
+- SMS / WhatsApp provider for critical alerts (FR-38, open question 5)
+- Teacher period swaps (FR-67), calendar import from PDF, offline page shell (service worker)
+- Phase 3 ideas from the PRD: at-risk prediction, revaluation requests, face verification, multi-campus
 
 ---
 

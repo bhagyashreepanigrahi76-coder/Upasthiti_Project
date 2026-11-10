@@ -229,7 +229,7 @@ export async function addRole(_prev: ActionState, formData: FormData): Promise<A
   const parsed = z
     .object({
       userId: id,
-      role: z.enum(["ADMIN", "HOD", "TEACHER", "MENTOR"]),
+      role: z.enum(["ADMIN", "HOD", "TEACHER", "MENTOR", "LIBRARIAN"]),
       departmentId: z.string().optional(),
       sectionId: z.string().optional(),
     })
@@ -324,4 +324,38 @@ export async function unlockUser(_prev: ActionState, formData: FormData): Promis
   await logAudit({ actorId: admin.id, action: "USER_UNLOCKED", entityType: "User", entityId: userId });
   refresh();
   return success("Account unlocked.");
+}
+
+/** FR-40: a student can have several parent emails. Siblings share a parent record. */
+export async function addParentContact(_prev: ActionState, formData: FormData): Promise<ActionState> {
+  const admin = await requireRole("ADMIN");
+  const parsed = z
+    .object({
+      studentId: id,
+      name: z.string().trim().min(2, "Enter the name").max(100),
+      email: z.string().trim().toLowerCase().pipe(z.email("Enter a valid email")),
+      phone: optionalPhone,
+      relationship: z.enum(["Father", "Mother", "Guardian"]).default("Guardian"),
+    })
+    .safeParse(formValues(formData));
+  if (!parsed.success) return fromZodError(parsed.error);
+  const p = parsed.data;
+  const parent = (await db.parent.findFirst({ where: { email: p.email } })) ?? (await db.parent.create({ data: { name: p.name, email: p.email, phone: p.phone } }));
+  const exists = await db.parentStudent.findUnique({ where: { parentId_studentId: { parentId: parent.id, studentId: p.studentId } } });
+  if (exists) return failure("That parent is already linked to this student.");
+  await db.parentStudent.create({ data: { parentId: parent.id, studentId: p.studentId, relationship: p.relationship } });
+  await logAudit({ actorId: admin.id, action: "PARENT_CONTACT_ADDED", entityType: "Student", entityId: p.studentId, details: { email: p.email } });
+  refresh();
+  return success("Parent contact added. They will receive the monthly reports.");
+}
+
+/** FR-40: only an admin can let a parent stop critical alerts. */
+export async function setCriticalOptOut(_prev: ActionState, formData: FormData): Promise<ActionState> {
+  const admin = await requireRole("ADMIN");
+  const parentId = String(formData.get("id") ?? "");
+  const allow = formData.get("allow") === "true";
+  await db.parent.update({ where: { id: parentId }, data: { criticalOptOutApproved: allow } });
+  await logAudit({ actorId: admin.id, action: allow ? "PARENT_CRITICAL_OPT_OUT_APPROVED" : "PARENT_CRITICAL_OPT_OUT_REVOKED", entityType: "Parent", entityId: parentId });
+  refresh();
+  return success(allow ? "This parent will no longer get critical alerts." : "Critical alerts are on again for this parent.");
 }

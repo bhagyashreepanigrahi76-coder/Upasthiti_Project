@@ -1,7 +1,7 @@
 // Roles and portals. No server-only imports here: this file is shared by
 // proxy.ts, server components and client components.
 
-export const ROLES = ["ADMIN", "HOD", "TEACHER", "MENTOR", "STUDENT", "PARENT"] as const;
+export const ROLES = ["ADMIN", "HOD", "TEACHER", "MENTOR", "STUDENT", "PARENT", "LIBRARIAN"] as const;
 export type RoleName = (typeof ROLES)[number];
 
 export function isRole(value: unknown): value is RoleName {
@@ -15,9 +15,10 @@ export const ROLE_LABELS: Record<RoleName, string> = {
   MENTOR: "Class Coordinator",
   STUDENT: "Student",
   PARENT: "Parent",
+  LIBRARIAN: "Librarian",
 };
 
-export type PortalKey = "admin" | "hod" | "teacher" | "student" | "parent";
+export type PortalKey = "admin" | "hod" | "teacher" | "student" | "parent" | "library";
 
 export type Portal = {
   key: PortalKey;
@@ -63,9 +64,16 @@ export const PORTALS: Record<PortalKey, Portal> = {
     roles: ["PARENT"],
     description: "Your child's attendance and results",
   },
+  library: {
+    key: "library",
+    label: "Library",
+    path: "/library",
+    roles: ["LIBRARIAN"],
+    description: "Books, issue and return, fines",
+  },
 };
 
-const PORTAL_ORDER: PortalKey[] = ["admin", "hod", "teacher", "student", "parent"];
+const PORTAL_ORDER: PortalKey[] = ["admin", "hod", "teacher", "student", "parent", "library"];
 
 export function canOpenPortal(roles: readonly RoleName[], portal: PortalKey): boolean {
   return PORTALS[portal].roles.some((r) => roles.includes(r));

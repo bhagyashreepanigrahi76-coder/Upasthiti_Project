@@ -43,7 +43,7 @@ export default async function StudentRequestsPage() {
 
       <div className="grid gap-6 xl:grid-cols-2">
         <Card title="Apply for leave">
-          <ActionForm action={submitLeave} submitLabel="Send leave request" resetOnSuccess encType="multipart/form-data">
+          <ActionForm action={submitLeave} submitLabel="Send leave request" resetOnSuccess>
             <FieldGrid cols={3}>
               <Field label="From" name="fromDate">
                 <Input name="fromDate" type="date" defaultValue={today} />
