@@ -1,0 +1,51 @@
+{
+  "name": "college-attendance-app",
+  "version": "0.1.0",
+  "private": true,
+  "scripts": {
+    "dev": "next dev",
+    "build": "next build",
+    "start": "next start",
+    "lint": "eslint",
+    "typecheck": "tsc --noEmit",
+    "db:migrate": "prisma migrate dev",
+    "db:seed": "prisma db seed",
+    "db:reset": "prisma migrate reset --force",
+    "db:studio": "prisma studio",
+    "postinstall": "prisma generate",
+    "test:e2e": "node tests/e2e-auth.mjs http://localhost:3000",
+    "test:e2e:days2-5": "node tests/e2e-days2-5.mjs . http://localhost:3000",
+    "test:e2e:days6-8": "node tests/e2e-days6-8.mjs . http://localhost:3000",
+    "test:unit": "node --conditions=react-server --import tsx --test tests/unit/*.test.ts",
+    "test:e2e:days9-10": "node tests/e2e-days9-10.mjs . http://localhost:3000",
+    "admin:create": "tsx prisma/create-admin.ts",
+    "db:deploy": "prisma migrate deploy",
+    "test:e2e:library-notes": "node tests/e2e-library-notes.mjs . http://localhost:3000"
+  },
+  "dependencies": {
+    "@prisma/client": "^6.19.3",
+    "bcryptjs": "^3.0.3",
+    "fflate": "^0.8.2",
+    "jose": "^6.2.15",
+    "next": "16.4.5",
+    "nodemailer": "^6.9.16",
+    "react": "19.3.0",
+    "react-dom": "19.3.0",
+    "server-only": "^0.0.1",
+    "zod": "^4.6.7"
+  },
+  "devDependencies": {
+    "@tailwindcss/postcss": "^4.3.5",
+    "@tailwindcss/turbopack": "^4",
+    "@types/node": "^20",
+    "@types/nodemailer": "^6.4.24",
+    "@types/react": "^19",
+    "@types/react-dom": "^19",
+    "eslint": "^9",
+    "eslint-config-next": "16.4.5",
+    "prisma": "^6.19.3",
+    "tailwindcss": "^4",
+    "tsx": "^4.23.15",
+    "typescript": "^5"
+  }
+}
