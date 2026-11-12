@@ -1,0 +1,29 @@
+# Render Blueprint: one web service + one free PostgreSQL database (demo hosting).
+services:
+  - type: web
+    name: upasthiti
+    runtime: node
+    plan: free
+    buildCommand: npm ci --include=dev && npx prisma migrate deploy && ALLOW_DEMO_SEED=1 npx tsx prisma/seed.ts && npm run build
+    startCommand: npm start
+    healthCheckPath: /api/health
+    envVars:
+      - key: NODE_VERSION
+        value: 22
+      - key: DATABASE_URL
+        fromDatabase:
+          name: upasthiti-db
+          property: connectionString
+      - key: SESSION_SECRET
+        generateValue: true
+      - key: CRON_SECRET
+        generateValue: true
+      - key: MAIL_TRANSPORT
+        value: console
+      - key: NEXT_PUBLIC_COLLEGE_NAME
+        value: N.C. Autonomous College, Jajpur
+      - key: NEXT_PUBLIC_TIME_ZONE
+        value: Asia/Kolkata
+databases:
+  - name: upasthiti-db
+    plan: free

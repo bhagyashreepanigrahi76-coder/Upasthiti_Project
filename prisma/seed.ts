@@ -20,7 +20,15 @@ const STUDENT_NAMES = [
 ];
 
 async function main() {
-  if (process.env.NODE_ENV === "production") throw new Error("Refusing to seed in production.");
+  if (process.env.ALLOW_DEMO_SEED === "1") {
+    // Demo hosting only: load demo data once, never wipe a database that already has users.
+    if ((await db.user.count()) > 0) {
+      console.log("Database already has users; skipping demo seed.");
+      return;
+    }
+  } else if (process.env.NODE_ENV === "production") {
+    throw new Error("Refusing to seed in production.");
+  }
 
   console.log("Clearing existing data…");
   await db.$transaction([
