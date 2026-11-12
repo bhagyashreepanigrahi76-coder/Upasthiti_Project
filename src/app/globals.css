@@ -165,3 +165,78 @@ body {
     animation: none;
   }
 }
+
+/*
+ * Dark mode. The <html> element gets the "dark" class (see ThemeToggle).
+ * The slate scale is inverted so every existing text-slate-*, bg-slate-* and
+ * border-slate-* utility flips automatically; brand and haldi tints are
+ * re-tuned for a dark surface.
+ */
+html.dark {
+  color-scheme: dark;
+
+  --color-slate-50: #111827;
+  --color-slate-100: #1a2234;
+  --color-slate-200: #2a3447;
+  --color-slate-300: #3b475c;
+  --color-slate-400: #6b7a90;
+  --color-slate-500: #94a3b8;
+  --color-slate-600: #b4c0d0;
+  --color-slate-700: #cbd5e1;
+  --color-slate-800: #e2e8f0;
+  --color-slate-900: #f1f5f9;
+
+  --color-brand-50: #2b1519;
+  --color-brand-100: #3d1e24;
+  --color-brand-600: #b03a4a;
+  --color-brand-700: #d4707c;
+  --color-brand-900: #f0c4c9;
+
+  --color-haldi-50: #2b2309;
+  --color-haldi-100: #3f3210;
+  --color-haldi-600: #e0a526;
+
+  --color-cream: #0b1120;
+}
+
+html.dark body {
+  background: #0b1120;
+  color: #e2e8f0;
+}
+
+html.dark .bg-white {
+  background-color: #151d2e;
+}
+
+/* Solid dark buttons stay dark (their text is white). */
+html.dark .bg-slate-800,
+html.dark .bg-slate-900 {
+  background-color: #334155;
+}
+
+html.dark .bg-brand-700 {
+  background-color: #9c2d3c;
+}
+
+html.dark .ikat-texture {
+  background-color: #0b1120;
+}
+
+html.dark .shimmer {
+  background-color: #1f2937;
+}
+
+html.dark .shimmer::after {
+  background-image: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.08), transparent);
+}
+
+html.dark input,
+html.dark select,
+html.dark textarea {
+  background-color: #0f172a;
+  color: #e2e8f0;
+}
+
+html.dark ::placeholder {
+  color: #64748b;
+}
