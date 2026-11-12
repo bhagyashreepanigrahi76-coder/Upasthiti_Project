@@ -32,6 +32,9 @@ const nextConfig: NextConfig = {
   cacheComponents: true,
   partialPrefetching: true,
   poweredByHeader: false,
+  // Lets a phone on the same Wi-Fi load the dev server (hydration/HMR are blocked otherwise).
+  // The four-label wildcard matches any IPv4 address, so a changing Wi-Fi IP keeps working.
+  allowedDevOrigins: ["*.*.*.*", "*.trycloudflare.com"],
   experimental: {
     serverActions: {
       // Notes are capped at 10 MB in code; imports, leave documents and notice attachments at 5 MB.
@@ -40,14 +43,6 @@ const nextConfig: NextConfig = {
   },
   async headers() {
     return [{ source: "/:path*", headers: securityHeaders }];
-  },
-  turbopack: {
-    rules: {
-      "*.css": {
-        loaders: ["@tailwindcss/turbopack"],
-        as: "*.css",
-      },
-    },
   },
 };
 

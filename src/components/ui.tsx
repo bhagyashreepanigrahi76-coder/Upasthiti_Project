@@ -87,7 +87,38 @@ export function EmptyState({ children }: { children: React.ReactNode }) {
 }
 
 export function Skeleton({ className = "" }: { className?: string }) {
-  return <div className={`animate-pulse rounded-lg bg-slate-200/70 ${className}`} />;
+  return <div aria-hidden="true" className={`shimmer rounded-lg ${className}`} />;
+}
+
+/** Skeleton for a data table: header strip plus placeholder rows. */
+export function TableSkeleton({ rows = 6, cols = 4 }: { rows?: number; cols?: number }) {
+  return (
+    <div aria-busy="true" aria-label="Loading" className="space-y-2">
+      <Skeleton className="h-8 w-full" />
+      {Array.from({ length: rows }, (_, r) => (
+        <div key={r} className="flex gap-3">
+          {Array.from({ length: cols }, (_, c) => (
+            <Skeleton key={c} className="h-6 flex-1" />
+          ))}
+        </div>
+      ))}
+    </div>
+  );
+}
+
+/** Skeleton for a list of cards (notices, notifications, ...). */
+export function ListSkeleton({ items = 4 }: { items?: number }) {
+  return (
+    <div aria-busy="true" aria-label="Loading" className="space-y-3">
+      {Array.from({ length: items }, (_, i) => (
+        <div key={i} className="rounded-xl border border-slate-200 bg-white p-4">
+          <Skeleton className="mb-2 h-5 w-2/3" />
+          <Skeleton className="h-4 w-full" />
+          <Skeleton className="mt-1.5 h-4 w-5/6" />
+        </div>
+      ))}
+    </div>
+  );
 }
 
 export function DashboardSkeleton() {

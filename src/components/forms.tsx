@@ -43,7 +43,7 @@ export function SubmitButton({
       onClick={(e) => {
         if (confirmText && !window.confirm(confirmText)) e.preventDefault();
       }}
-      className={`inline-flex items-center justify-center rounded-md font-medium disabled:opacity-60 ${
+      className={`inline-flex items-center justify-center rounded-md font-medium disabled:opacity-60 ${pending ? "shimmer-btn" : ""} ${
         size === "sm" ? "px-2.5 py-1 text-xs" : "px-4 py-2 text-sm"
       } ${buttonTones[tone]}`}
     >

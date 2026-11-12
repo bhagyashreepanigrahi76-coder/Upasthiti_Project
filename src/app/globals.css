@@ -62,10 +62,106 @@ body {
   background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='48' height='48' viewBox='0 0 48 48'%3E%3Cg fill='none' stroke='%237a1f2b' stroke-opacity='.07' stroke-width='1.5'%3E%3Cpath d='M24 6 42 24 24 42 6 24z'/%3E%3Cpath d='M24 16 32 24 24 32 16 24z'/%3E%3C/g%3E%3Ccircle cx='24' cy='24' r='2' fill='%23e0a526' fill-opacity='.18'/%3E%3C/svg%3E");
 }
 
+/* Shimmer: a soft highlight sweeping across a skeleton placeholder. */
+@keyframes shimmer {
+  100% {
+    transform: translateX(100%);
+  }
+}
+
+.shimmer {
+  position: relative;
+  overflow: hidden;
+  background-color: #e2e8f0;
+  isolation: isolate;
+}
+
+.shimmer::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  transform: translateX(-100%);
+  background-image: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.9), transparent);
+  animation: shimmer 1.2s ease-in-out infinite;
+}
+
+/* Text shimmer for inline "Loading..." labels. */
+.shimmer-text {
+  color: transparent;
+  background-image: linear-gradient(90deg, #94a3b8 30%, #f1f5f9 50%, #94a3b8 70%);
+  background-size: 200% 100%;
+  background-clip: text;
+  -webkit-background-clip: text;
+  animation: shimmer-text 1.6s linear infinite;
+}
+
+@keyframes shimmer-text {
+  from {
+    background-position: 200% 0;
+  }
+  to {
+    background-position: -200% 0;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .shimmer::after,
+  .shimmer-text {
+    animation: none;
+  }
+}
+
 @media print {
+  .shimmer::after {
+    display: none;
+  }
   .sambalpuri-band,
   .temple-border {
     print-color-adjust: exact;
     -webkit-print-color-adjust: exact;
+  }
+}
+
+/* Route-change progress bar: maroon-to-haldi band with a moving highlight. */
+.shimmer-bar {
+  background-image: linear-gradient(90deg, #7a1f2b, #e0a526, #7a1f2b);
+  background-size: 200% 100%;
+  animation: bar-slide 1s linear infinite;
+}
+
+@keyframes bar-slide {
+  from {
+    background-position: 200% 0;
+  }
+  to {
+    background-position: 0 0;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .shimmer-bar {
+    animation: none;
+  }
+}
+
+/* Pending buttons keep their colour; only the highlight sweeps over them. */
+.shimmer-btn {
+  position: relative;
+  overflow: hidden;
+  isolation: isolate;
+}
+
+.shimmer-btn::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  transform: translateX(-100%);
+  background-image: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.45), transparent);
+  animation: shimmer 1.2s ease-in-out infinite;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .shimmer-btn::after {
+    animation: none;
   }
 }

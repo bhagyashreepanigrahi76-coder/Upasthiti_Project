@@ -10,6 +10,7 @@ import { hashPassword, temporaryPassword } from "@/lib/password";
 import { collegeIdSchema, optionalEmail, optionalPhone } from "@/lib/password-policy";
 import { type ActionState, failure, formValues, fromZodError, success } from "@/lib/action-state";
 import { isUniqueViolation } from "@/lib/db-errors";
+import { sendCredentialsEmail } from "@/lib/credentials-mail";
 
 const id = z.string().min(1);
 
@@ -51,6 +52,9 @@ export async function createUser(_prev: ActionState, formData: FormData): Promis
   const kind = values.kind;
   const base = baseUser.safeParse(values);
   if (!base.success) return fromZodError(base.error);
+  if (kind === "STUDENT" && !base.data.email) {
+    return { fieldErrors: { email: "Required so the login details can be emailed" }, error: "Enter the student's email." };
+  }
 
   const tempPassword = temporaryPassword();
   const passwordHash = await hashPassword(tempPassword);
@@ -155,9 +159,14 @@ export async function createUser(_prev: ActionState, formData: FormData): Promis
     if (isUniqueViolation(err)) return failure("That college ID or email is already used by another account.");
     throw err;
   }
+  const mail = await sendCredentialsEmail({ to: base.data.email, name: base.data.name, collegeId: base.data.collegeId, tempPassword });
+  await logAudit({ actorId: admin.id, action: "CREDENTIALS_EMAILED", entityType: "User", details: { collegeId: base.data.collegeId, sent: mail.sent, error: mail.error } });
   refresh();
+  const who = `${base.data.name} (${base.data.collegeId}) created.`;
   return success(
-    `${base.data.name} (${base.data.collegeId}) created. They sign in with this temporary password, then verify a code and choose their own:`,
+    mail.sent
+      ? `${who} Login details were emailed to ${base.data.email}. Temporary password (in case it is needed):`
+      : `${who} The email could not be sent (${mail.error}). Give them this temporary password yourself:`,
     { secret: tempPassword },
   );
 }
@@ -302,7 +311,7 @@ export async function resetUserPassword(_prev: ActionState, formData: FormData):
   const admin = await requireRole("ADMIN");
   const userId = String(formData.get("id") ?? "");
   const tempPassword = temporaryPassword();
-  await db.user.update({
+  const target = await db.user.update({
     where: { id: userId },
     data: {
       passwordHash: await hashPassword(tempPassword),
@@ -311,10 +320,17 @@ export async function resetUserPassword(_prev: ActionState, formData: FormData):
       lockedUntil: null,
       sessionVersion: { increment: 1 },
     },
+    select: { name: true, email: true, collegeId: true },
   });
   await logAudit({ actorId: admin.id, action: "PASSWORD_RESET_BY_ADMIN", entityType: "User", entityId: userId });
+  const mail = await sendCredentialsEmail({ to: target.email, name: target.name, collegeId: target.collegeId, tempPassword, reset: true });
   refresh();
-  return success("Password reset and all sessions ended. Temporary password:", { secret: tempPassword });
+  return success(
+    mail.sent
+      ? `Password reset, all sessions ended and the new password was emailed to ${target.email}. Temporary password:`
+      : `Password reset and all sessions ended. Email not sent (${mail.error}). Temporary password:`,
+    { secret: tempPassword },
+  );
 }
 
 export async function unlockUser(_prev: ActionState, formData: FormData): Promise<ActionState> {

@@ -67,8 +67,16 @@ export async function requestRecoveryCode(_prev: ActionState, formData: FormData
   });
   // Same answer whether or not the ID exists, so IDs cannot be probed.
   if (user?.isActive) {
-    const result = await issueOtp(user, "PASSWORD_RESET");
-    await logAudit({ actorId: user.id, action: "PASSWORD_CODE_REQUESTED", details: { delivered: result.ok } });
+    let delivered = false;
+    let error: string | undefined;
+    try {
+      delivered = (await issueOtp(user, "PASSWORD_RESET")).ok;
+    } catch (err) {
+      // Mail server problem: keep the neutral answer, but record it for the admin.
+      error = err instanceof Error ? err.message : String(err);
+      console.error("[recover] could not send reset code:", error);
+    }
+    await logAudit({ actorId: user.id, action: "PASSWORD_CODE_REQUESTED", details: { delivered, error } });
   }
   return success(NEUTRAL);
 }
