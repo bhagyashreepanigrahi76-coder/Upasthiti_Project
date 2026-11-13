@@ -4,12 +4,12 @@ import { useEffect, useRef, useState } from "react";
 import QRCode from "qrcode";
 import { currentQrLink } from "@/app/attendance-actions/qr-actions";
 
-const SLOT_SECONDS = 20;
+const SLOT_SECONDS = 60;
 
 /**
  * The teacher's rotating attendance QR. It asks the server for the current
  * signed link, draws it as a QR code, and swaps it for a fresh one every
- * 20 seconds. Students scan it with their phone camera.
+ * 60 seconds. Students scan it with their phone camera.
  */
 export function QrDisplay({ dateKey, periodKey }: { dateKey: string; periodKey: string }) {
   const [image, setImage] = useState<string | null>(null);
@@ -87,7 +87,7 @@ export function QrDisplay({ dateKey, periodKey }: { dateKey: string; periodKey: 
         <div className="h-2 w-full overflow-hidden rounded-full bg-slate-200" aria-hidden="true">
           <div className="h-full rounded-full bg-brand-600 transition-[width] duration-300" style={{ width: `${(secondsLeft / SLOT_SECONDS) * 100}%` }} />
         </div>
-        <p className="mt-1 text-xs text-slate-500">New code in {secondsLeft}s</p>
+        <p className="mt-1 text-xs text-slate-500">New code in {Math.floor(secondsLeft / 60)}:{String(secondsLeft % 60).padStart(2, "0")}</p>
       </div>
 
       <p className="text-sm text-slate-700">Students: open your phone camera, scan this code and tap the link. Sign in if asked.</p>
@@ -96,7 +96,7 @@ export function QrDisplay({ dateKey, periodKey }: { dateKey: string; periodKey: 
           {counts.present} of {counts.total} students marked present
         </p>
       )}
-      <p className="text-xs text-slate-500">The code changes every 20 seconds, so a photo of it will not work later.</p>
+      <p className="text-xs text-slate-500">The code changes every 60 seconds, so an old photo of it will not work later.</p>
     </div>
   );
 }

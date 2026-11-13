@@ -7,14 +7,14 @@ process.env.SESSION_SECRET = "unit-test-secret-unit-test-secret-1234";
 
 const date = "2026-11-13";
 const period = "slot123";
-const t0 = Date.UTC(2026, 10, 13, 4, 0, 5); // any moment; slots are 20 s long
+const t0 = Date.UTC(2026, 10, 13, 4, 0, 5); // any moment; slots are 60 s long
 const slot = slotAt(t0);
 
 test("a fresh code is accepted", () => {
   assert.equal(verifyQr(date, period, slot, signQr(date, period, slot), t0), "ok");
 });
 
-test("the next 20-second slot still accepts it (grace), the one after does not", () => {
+test("the next 60-second slot still accepts it (grace), the one after does not", () => {
   const sig = signQr(date, period, slot);
   assert.equal(verifyQr(date, period, slot, sig, t0 + QR_SLOT_MS), "ok");
   assert.equal(verifyQr(date, period, slot, sig, t0 + 2 * QR_SLOT_MS), "expired");
