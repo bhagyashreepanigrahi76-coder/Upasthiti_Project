@@ -6,8 +6,15 @@ import { findPeriod, rosterFor } from "@/lib/class-attendance";
 import { isDateKey, toDateKey } from "@/lib/dates";
 import { QR_SLOT_MS, markSelfPresent, scanPath, slotAt, type ScanResult } from "@/lib/qr-attendance";
 
+/** The public address students scan to. Set APP_URL, or Render fills in RENDER_EXTERNAL_URL itself. */
+function publicBase(): string | null {
+  const url = process.env.APP_URL || process.env.RENDER_EXTERNAL_URL;
+  if (!url || !url.startsWith("http")) return null;
+  return url.endsWith("/") ? url.slice(0, -1) : url;
+}
+
 export type QrLink =
-  | { ok: true; path: string; slot: number; serverNow: number; expiresAt: number; present: number; total: number }
+  | { ok: true; path: string; base: string | null; slot: number; serverNow: number; expiresAt: number; present: number; total: number }
   | { ok: false; error: string };
 
 /** Teacher's screen: the current QR link for a period, plus how many students have scanned. */
@@ -33,7 +40,7 @@ export async function currentQrLink(dateKey: string, periodKey: string): Promise
 
   const serverNow = Date.now();
   const slot = slotAt(serverNow);
-  return { ok: true, path: scanPath(dateKey, periodKey, slot), slot, serverNow, expiresAt: (slot + 1) * QR_SLOT_MS, present, total: roster.length };
+  return { ok: true, path: scanPath(dateKey, periodKey, slot), base: publicBase(), slot, serverNow, expiresAt: (slot + 1) * QR_SLOT_MS, present, total: roster.length };
 }
 
 /** Student's phone: mark the signed-in student present using the scanned QR. */
