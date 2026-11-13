@@ -1,10 +1,17 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState, useSyncExternalStore } from "react";
 import QRCode from "qrcode";
 import { currentQrLink } from "@/app/attendance-actions/qr-actions";
 
 const SLOT_SECONDS = 60;
+
+// A phone cannot open localhost or a home-Wi-Fi address, so a QR made from one is useless to students.
+const isPrivateHost = (h: string) =>
+  h === "localhost" || /^(127\.|10\.|192\.168\.|172\.(1[6-9]|2\d|3[01])\.)/.test(h) || h.endsWith(".local");
+const noSubscribe = () => () => {};
+const onPrivateHost = () => isPrivateHost(window.location.hostname);
+const neverOnServer = () => false;
 
 /**
  * The teacher's rotating attendance QR. It asks the server for the current
@@ -15,7 +22,9 @@ export function QrDisplay({ dateKey, periodKey }: { dateKey: string; periodKey: 
   const [image, setImage] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [secondsLeft, setSecondsLeft] = useState(SLOT_SECONDS);
+  const [hasBase, setHasBase] = useState(false);
   const [counts, setCounts] = useState<{ present: number; total: number } | null>(null);
+  const privateHost = useSyncExternalStore(noSubscribe, onPrivateHost, neverOnServer);
   const clock = useRef({ slot: -1, expiresAt: 0, offset: 0, busy: false });
 
   useEffect(() => {
@@ -36,9 +45,10 @@ export function QrDisplay({ dateKey, periodKey }: { dateKey: string; periodKey: 
         c.offset = r.serverNow - Date.now(); // keep the countdown on the server's clock
         c.expiresAt = r.expiresAt;
         setCounts({ present: r.present, total: r.total });
+        setHasBase(r.base !== null);
         if (r.slot !== c.slot) {
           c.slot = r.slot;
-          const data = await QRCode.toDataURL(window.location.origin + r.path, { width: 520, margin: 2, errorCorrectionLevel: "M" });
+          const data = await QRCode.toDataURL((r.base ?? window.location.origin) + r.path, { width: 520, margin: 2, errorCorrectionLevel: "M" });
           if (!stopped) setImage(data);
         }
       } catch {
@@ -73,6 +83,11 @@ export function QrDisplay({ dateKey, periodKey }: { dateKey: string; periodKey: 
 
   return (
     <div className="mx-auto flex max-w-md flex-col items-center gap-4 text-center">
+      {privateHost && !hasBase && (
+        <p role="alert" className="rounded-md bg-red-50 px-3 py-2 text-sm font-medium text-red-800">
+          This page was opened from a private address ({typeof window !== "undefined" ? window.location.host : ""}), so students&apos; phones cannot open this QR code. Open the app with its public https link (for example the onrender.com address) and show the QR code from there.
+        </p>
+      )}
       <div className="rounded-2xl border border-slate-300 bg-white p-3 shadow-md">
         {image ? (
           // A plain <img>: the QR is a data URL made in the browser, so next/image has nothing to optimise.
