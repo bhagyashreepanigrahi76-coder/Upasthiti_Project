@@ -5,7 +5,7 @@ import { getTeacherProfile, requirePortal } from "@/lib/auth";
 import { db } from "@/lib/db";
 import { getSettings } from "@/lib/settings";
 import { editWindowPassed, findPeriod, rosterFor } from "@/lib/class-attendance";
-import { formatDateKey, isDateKey } from "@/lib/dates";
+import { formatDateKey, isDateKey, toDateKey } from "@/lib/dates";
 import { formatDateTime } from "@/lib/config";
 import { Badge, Card, PageHeader } from "@/components/ui";
 import { AttendanceSheet } from "@/components/attendance-sheet";
@@ -54,7 +54,17 @@ export default async function MarkPeriodPage({ params }: Props) {
           </>
         }
       >
-        {session ? <Badge tone="green">Taken {formatDateTime(session.takenAt)}</Badge> : <Badge tone="amber">Not taken yet</Badge>}
+        <div className="flex flex-wrap items-center gap-2">
+          {date === toDateKey(new Date()) && (
+            <Link
+              href={`/teacher/attendance/${date}/${encodeURIComponent(periodKey)}/qr`}
+              className="rounded-md bg-brand-600 px-3 py-1.5 text-sm font-semibold text-white hover:bg-brand-700"
+            >
+              Show QR code
+            </Link>
+          )}
+          {session ? <Badge tone="green">Taken {formatDateTime(session.takenAt)}</Badge> : <Badge tone="amber">Not taken yet</Badge>}
+        </div>
       </PageHeader>
 
       {session && session.editRequests.length > 0 && (
@@ -76,7 +86,8 @@ export default async function MarkPeriodPage({ params }: Props) {
             id: s.id,
             name: s.user.name,
             rollNo: s.rollNo,
-            status: session?.records.find((r) => r.studentId === s.id)?.status ?? (onLeave.has(s.id) ? "ON_LEAVE" : "PRESENT"),
+            // In an existing session, a student with no record has not scanned the QR, so starts as Absent.
+            status: session?.records.find((r) => r.studentId === s.id)?.status ?? (onLeave.has(s.id) ? "ON_LEAVE" : session ? "ABSENT" : "PRESENT"),
             hasCampusDay: onCampus.has(s.id),
             onApprovedLeave: onLeave.has(s.id),
           }))}
