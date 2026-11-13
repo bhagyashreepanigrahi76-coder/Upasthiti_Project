@@ -4,7 +4,7 @@ services:
     name: upasthiti
     runtime: node
     plan: free
-    buildCommand: npm ci --include=dev && npx prisma migrate deploy && ALLOW_DEMO_SEED=1 npx tsx prisma/seed.ts && npm run build
+    buildCommand: npm ci --include=dev && npx prisma migrate deploy && ALLOW_DEMO_SEED=1 npx tsx prisma/seed.ts && npx tsx prisma/ensure-campus.ts && npm run build
     startCommand: npm start
     healthCheckPath: /api/health
     envVars:
