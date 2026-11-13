@@ -6,12 +6,12 @@ import { logAudit } from "./audit";
 import { minutesOfDay, parseHHMM, toDateKey } from "./dates";
 
 // Rotating QR attendance. The teacher's screen shows a QR code that changes
-// every 20 seconds; a student scans it and is marked Present for that period.
+// every 60 seconds; a student scans it and is marked Present for that period.
 // Nothing is stored for the QR itself: each code carries a signature (HMAC of
-// the date, period and 20-second slot, made with SESSION_SECRET), so the
+// the date, period and 60-second slot, made with SESSION_SECRET), so the
 // server can check it without a database table.
 
-export const QR_SLOT_MS = 20_000;
+export const QR_SLOT_MS = 60_000;
 export const slotAt = (t = Date.now()) => Math.floor(t / QR_SLOT_MS);
 
 function secret(): string {
@@ -26,7 +26,7 @@ export function signQr(dateKey: string, periodKey: string, slot: number): string
 
 export type QrCheck = "ok" | "expired" | "invalid";
 
-/** A code is valid in its own 20-second slot and in the next one (a short grace for scanning and page load). */
+/** A code is valid in its own 60-second slot and in the next one (a short grace for scanning and page load). */
 export function verifyQr(dateKey: string, periodKey: string, slot: number, sig: string, now = Date.now()): QrCheck {
   if (!Number.isInteger(slot) || typeof sig !== "string") return "invalid";
   const expected = Buffer.from(signQr(dateKey, periodKey, slot));
